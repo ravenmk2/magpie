@@ -33,18 +33,18 @@ public class RetryMessageStoreImpl implements RetryMessageStore {
     }
 
     @Override
-    public Set<String> listKeys(String consumer) {
+    public Set<String> listKeys(@NonNull String consumer) {
         return this.retryMessageRepository.findDistinctBusinessKeysByConsumer(consumer);
     }
 
     @Override
-    public List<RetryRecord> list(String consumer, int count) {
+    public List<RetryRecord> list(@NonNull String consumer, int count) {
         var entities = this.retryMessageRepository.findByConsumerOrderByIdAsc(consumer, PageRequest.of(0, count));
         return toRetryRecords(entities);
     }
 
     @Override
-    public List<RetryRecord> listRetryable(String consumer, int count) {
+    public List<RetryRecord> listRetryable(@NonNull String consumer, int count) {
         var entities = this.retryMessageRepository.findByConsumerAndRetryAtBeforeOrderByIdAsc(
                 consumer, LocalDateTime.now(), PageRequest.of(0, count));
         return toRetryRecords(entities);
@@ -52,7 +52,7 @@ public class RetryMessageStoreImpl implements RetryMessageStore {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void save(String consumer, ConsumerRecord record) {
+    public void save(@NonNull String consumer, @NonNull ConsumerRecord record) {
         var logEntity = new MessageLogEntity();
         logEntity.setId(Uuids.uuid7Hex());
         logEntity.setMessageId(record.getId());
@@ -79,13 +79,13 @@ public class RetryMessageStoreImpl implements RetryMessageStore {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void succeeded(String id) {
+    public void succeeded(@NonNull String id) {
         this.retryMessageRepository.deleteById(id);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void failed(String id, LocalDateTime retryAt) {
+    public void failed(@NonNull String id, @NonNull LocalDateTime retryAt) {
         var entity = this.retryMessageRepository.findById(id).orElse(null);
         if (entity == null) {
             log.warn("Retry message not found: {}", id);
@@ -96,7 +96,7 @@ public class RetryMessageStoreImpl implements RetryMessageStore {
         this.retryMessageRepository.save(entity);
     }
 
-    private List<RetryRecord> toRetryRecords(List<RetryMessageEntity> retryEntities) {
+    private List<RetryRecord> toRetryRecords(@NonNull List<RetryMessageEntity> retryEntities) {
         if (retryEntities.isEmpty()) {
             return List.of();
         }
@@ -118,7 +118,8 @@ public class RetryMessageStoreImpl implements RetryMessageStore {
         return records;
     }
 
-    private RetryRecord buildRetryRecord(RetryMessageEntity retry, MessageLogEntity log) {
+    private RetryRecord buildRetryRecord(@NonNull RetryMessageEntity retry,
+                                         @NonNull MessageLogEntity log) {
         return new RetryRecord()
                 .setId(retry.getId())
                 .setLogId(log.getId())

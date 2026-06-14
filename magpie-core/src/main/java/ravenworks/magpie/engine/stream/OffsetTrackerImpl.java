@@ -14,8 +14,8 @@ public class OffsetTrackerImpl implements OffsetTracker {
         this.repository = repository;
     }
 
-    @Transactional
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public long read(@NonNull String name, int partition) {
         String id = name + ":" + partition;
         var existing = this.repository.findById(id);
@@ -26,8 +26,8 @@ public class OffsetTrackerImpl implements OffsetTracker {
         return 0L;
     }
 
-    @Transactional
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void write(@NonNull String name, int partition, long offset) {
         String id = name + ":" + partition;
         int rows = this.repository.updateOffset(id, offset);

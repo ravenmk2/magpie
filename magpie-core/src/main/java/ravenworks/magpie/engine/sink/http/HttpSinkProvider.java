@@ -1,6 +1,7 @@
 package ravenworks.magpie.engine.sink.http;
 
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import ravenworks.magpie.engine.retry.RetryMessageStore;
 import ravenworks.magpie.engine.sink.SinkConnector;
 import ravenworks.magpie.engine.sink.SinkProvider;
@@ -12,6 +13,7 @@ import ravenworks.magpie.engine.stream.StreamRegistry;
 /**
  * @author Raven
  */
+@Slf4j
 public class HttpSinkProvider implements SinkProvider {
 
     private final StreamRegistry streamRegistry;

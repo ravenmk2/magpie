@@ -2,6 +2,7 @@ package ravenworks.magpie.engine.rabbitmq;
 
 import com.rabbitmq.stream.Address;
 import com.rabbitmq.stream.AddressResolver;
+import lombok.NonNull;
 
 import java.net.URI;
 import java.util.List;
@@ -16,7 +17,7 @@ public class RoundRobinAddressResolver implements AddressResolver {
     private final List<URI> uris;
     private final AtomicInteger counter = new AtomicInteger(0);
 
-    public RoundRobinAddressResolver(List<URI> uris) {
+    public RoundRobinAddressResolver(@NonNull List<URI> uris) {
         this.uris = List.copyOf(uris);
     }
 

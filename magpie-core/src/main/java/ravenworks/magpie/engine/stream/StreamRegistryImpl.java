@@ -27,7 +27,7 @@ public class StreamRegistryImpl implements StreamRegistry {
     }
 
     @Override
-    public StreamDefinition getStream(String name) {
+    public StreamDefinition getStream(@NonNull String name) {
         return this.topicRepository.findAll()
                 .stream()
                 .filter(e -> e.getName().equals(name))
@@ -36,7 +36,7 @@ public class StreamRegistryImpl implements StreamRegistry {
                 .orElse(null);
     }
 
-    private StreamDefinition toDefinition(TopicEntity entity) {
+    private StreamDefinition toDefinition(@NonNull TopicEntity entity) {
         return new StreamDefinition(
                 entity.getName(),
                 entity.getPartitions(),

@@ -1,6 +1,7 @@
 package ravenworks.magpie.common.util;
 
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 
@@ -10,7 +11,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class CircuitBreaker {
 
-    @Getter
     public enum State {CLOSED, OPEN, HALF_OPEN}
 
 
@@ -19,12 +19,13 @@ public class CircuitBreaker {
     private final int halfOpenSuccessCount;
     private final long resetMillis;
 
+    @Getter
     private State state = State.CLOSED;
     private int consecutiveFailures;
     private int consecutiveSuccesses;
     private long openUntilTimestamp;
 
-    public CircuitBreaker(String name, int failureThreshold, int halfOpenSuccessCount, long resetMillis) {
+    public CircuitBreaker(@NonNull String name, int failureThreshold, int halfOpenSuccessCount, long resetMillis) {
         this.name = name;
         this.failureThreshold = failureThreshold;
         this.halfOpenSuccessCount = halfOpenSuccessCount;
@@ -58,10 +59,6 @@ public class CircuitBreaker {
         } else if (this.state == State.CLOSED && this.consecutiveFailures >= this.failureThreshold) {
             transitionToOpen();
         }
-    }
-
-    public State getState() {
-        return this.state;
     }
 
     private void transitionToOpen() {

@@ -59,7 +59,8 @@ public class RabbitStreamProducer implements StreamProducer {
         return future;
     }
 
-    private Message buildMessage(@NonNull Producer producer, @NonNull MessageRecord record) {
+    private Message buildMessage(@NonNull Producer producer,
+                                 @NonNull MessageRecord record) {
         var appProps = producer.messageBuilder()
                 .properties()
                 .messageId(record.getId())

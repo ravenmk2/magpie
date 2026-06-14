@@ -21,7 +21,8 @@ public class RabbitStreamProvider implements StreamProvider {
     private final Environment environment;
     private final OffsetTracker offsetTracker;
 
-    public RabbitStreamProvider(@NonNull List<URI> uris, @NonNull OffsetTracker offsetTracker) {
+    public RabbitStreamProvider(@NonNull List<URI> uris,
+                                @NonNull OffsetTracker offsetTracker) {
         this.offsetTracker = offsetTracker;
         this.environment = Environment.builder()
                 .id("magpie")
@@ -45,7 +46,8 @@ public class RabbitStreamProvider implements StreamProvider {
     }
 
     @Override
-    public List<StreamConsumer> consumer(@NonNull StreamDefinition definition, String name) {
+    public List<StreamConsumer> consumer(@NonNull StreamDefinition definition,
+                                         @NonNull String name) {
         List<StreamConsumer> consumers = new ArrayList<>();
         for (int i = 0; i < definition.partitions(); i++) {
             consumers.add(new RabbitStreamConsumer(this.environment, definition, i, name, this.offsetTracker));

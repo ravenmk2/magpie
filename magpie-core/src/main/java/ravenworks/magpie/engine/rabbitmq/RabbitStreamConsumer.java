@@ -24,7 +24,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Slf4j
 public class RabbitStreamConsumer implements StreamConsumer {
 
-    private static final Set<String> KNOWN_KEYS = Set.of("x-business-key", "x-tenant-id", "x-type", "x-event-time");
+    private static final Set<String> KNOWN_KEYS = Set.of(
+            "x-business-key",
+            "x-tenant-id",
+            "x-type",
+            "x-event-time"
+    );
 
     private final Environment environment;
     private final StreamDefinition definition;
@@ -40,7 +45,7 @@ public class RabbitStreamConsumer implements StreamConsumer {
     public RabbitStreamConsumer(@NonNull Environment environment,
                                 @NonNull StreamDefinition definition,
                                 int partition,
-                                String name,
+                                @NonNull String name,
                                 @NonNull OffsetTracker offsetTracker) {
         this.environment = environment;
         this.definition = definition;
@@ -105,6 +110,7 @@ public class RabbitStreamConsumer implements StreamConsumer {
             try {
                 item = this.queue.poll(remaining, TimeUnit.NANOSECONDS);
             } catch (InterruptedException e) {
+                log.info("[{}] partition={} poll interrupted", this.name, this.partition);
                 Thread.currentThread().interrupt();
                 break;
             }

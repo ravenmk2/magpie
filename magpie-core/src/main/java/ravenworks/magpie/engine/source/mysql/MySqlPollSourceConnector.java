@@ -33,11 +33,11 @@ public class MySqlPollSourceConnector implements SourceConnector {
     private static final int DEFAULT_BATCH_SIZE = 100;
     private static final int DEFAULT_RETRY_DELAY_MS = 300_000;
     private static final Object POLL_SIGNAL = new Object();
-    private static final String STRATEGY_SPEED = "speed";
-    private static final String STRATEGY_ORDERED = "ordered";
+    private static final String STRATEGY_KEY_ORDERED = "key_ordered";
+    private static final String STRATEGY_BEST_EFFORT = "best_effort";
 
 
-    private enum SendStrategy {SPEED, ORDERED}
+    private enum SendStrategy {KEY_ORDERED, BEST_EFFORT}
 
 
     private final String name;
@@ -68,7 +68,7 @@ public class MySqlPollSourceConnector implements SourceConnector {
         this.password = getStringProperty(properties, "password", "");
         this.batchSize = getIntProperty(properties, "batchSize", DEFAULT_BATCH_SIZE);
         this.retryDelay = getIntProperty(properties, "retryDelay", DEFAULT_RETRY_DELAY_MS);
-        this.sendStrategy = parseSendStrategy(getStringProperty(properties, "sendStrategy", STRATEGY_SPEED));
+        this.sendStrategy = parseSendStrategy(getStringProperty(properties, "sendStrategy", STRATEGY_BEST_EFFORT));
         int pollInterval = getIntProperty(properties, "pollInterval", DEFAULT_POLL_INTERVAL_MS);
         this.eventLoop = new EventLoop("src-" + name, pollInterval, this::dispatch);
     }
@@ -119,9 +119,9 @@ public class MySqlPollSourceConnector implements SourceConnector {
         if (records.isEmpty()) {
             return;
         }
-        var futures = this.sendStrategy == SendStrategy.SPEED
-                ? sendBatchSpeed(records)
-                : sendBatchOrdered(records);
+        var futures = this.sendStrategy == SendStrategy.KEY_ORDERED
+                ? sendBatchKeyOrdered(records)
+                : sendBatchBestEffort(records);
 
         CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)).join();
 
@@ -164,7 +164,7 @@ public class MySqlPollSourceConnector implements SourceConnector {
         return records;
     }
 
-    private List<CompletableFuture<SendResult>> sendBatchSpeed(List<OutboxRecord> records) {
+    private List<CompletableFuture<SendResult>> sendBatchBestEffort(List<OutboxRecord> records) {
         List<CompletableFuture<SendResult>> futures = new ArrayList<>();
         for (var r : records) {
             futures.add(this.producer.send(buildMessage(r)));
@@ -172,7 +172,7 @@ public class MySqlPollSourceConnector implements SourceConnector {
         return futures;
     }
 
-    private List<CompletableFuture<SendResult>> sendBatchOrdered(List<OutboxRecord> records) {
+    private List<CompletableFuture<SendResult>> sendBatchKeyOrdered(List<OutboxRecord> records) {
         List<CompletableFuture<SendResult>> allFutures = new ArrayList<>();
         List<CompletableFuture<SendResult>> currentBatch = new ArrayList<>();
         Set<String> seenKeys = new HashSet<>();
@@ -293,10 +293,10 @@ public class MySqlPollSourceConnector implements SourceConnector {
     }
 
     private static SendStrategy parseSendStrategy(String value) {
-        if (STRATEGY_ORDERED.equalsIgnoreCase(value)) {
-            return SendStrategy.ORDERED;
+        if (STRATEGY_KEY_ORDERED.equalsIgnoreCase(value)) {
+            return SendStrategy.KEY_ORDERED;
         }
-        return SendStrategy.SPEED;
+        return SendStrategy.BEST_EFFORT;
     }
 
 

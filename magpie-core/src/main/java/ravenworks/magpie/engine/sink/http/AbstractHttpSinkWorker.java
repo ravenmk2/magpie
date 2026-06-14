@@ -1,9 +1,8 @@
 package ravenworks.magpie.engine.sink.http;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import ravenworks.magpie.common.json.JsonUtils;
 import ravenworks.magpie.common.runtime.EventLoop;
 import ravenworks.magpie.common.util.CircuitBreaker;
 import ravenworks.magpie.engine.sink.http.HttpSinkConnector.HttpConfig;
@@ -31,9 +30,6 @@ abstract class AbstractHttpSinkWorker {
     static final int BATCH_SIZE = 100;
     static final Object POLL_SIGNAL = new Object();
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
-            .registerModule(new JavaTimeModule());
-
     static final Set<String> RESERVED_CE_KEYS = Set.of(
             "specversion", "id", "source", "type", "time",
             "subject", "datacontenttype", "data", "headers"
@@ -51,7 +47,10 @@ abstract class AbstractHttpSinkWorker {
     volatile Thread eventLoopThread;
     volatile boolean stopped;
 
-    AbstractHttpSinkWorker(String name, int partition, StreamConsumer consumer, HttpConfig config) {
+    AbstractHttpSinkWorker(@NonNull String name,
+                           int partition,
+                           @NonNull StreamConsumer consumer,
+                           @NonNull HttpConfig config) {
         this.name = name;
         this.partition = partition;
         this.consumer = consumer;
@@ -199,11 +198,7 @@ abstract class AbstractHttpSinkWorker {
         }
         ce.put("headers", extHeaders);
 
-        try {
-            return OBJECT_MAPPER.writeValueAsString(ce);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("Failed to serialize CloudEvent", e);
-        }
+        return JsonUtils.encode(ce);
     }
 
     static long computeBackoffDelay(String backoff, long delay, long maxDelay, int attempt) {
