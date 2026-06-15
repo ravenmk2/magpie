@@ -10,7 +10,7 @@ import java.util.Set;
 
 
 @Data
-public class HttpSenderConfig {
+public class HttpSinkHandlerConfig {
 
     @JsonProperty(required = true)
     String url;
@@ -35,8 +35,8 @@ public class HttpSenderConfig {
 
     Set<Integer> retryStatusCodes;
 
-    public static HttpSenderConfig of(Map<String, Object> props) {
-        var config = new HttpSenderConfig();
+    public static HttpSinkHandlerConfig of(Map<String, Object> props) {
+        var config = new HttpSinkHandlerConfig();
         PropertiesUtils.bind(config, props);
         if (config.url == null || config.url.isBlank()) {
             throw new IllegalArgumentException("url is required");

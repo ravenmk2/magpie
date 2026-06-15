@@ -4,6 +4,9 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import ravenworks.magpie.common.json.JsonUtils;
 import ravenworks.magpie.common.util.CircuitBreaker;
+import ravenworks.magpie.engine.sink.SinkHandler;
+import ravenworks.magpie.engine.sink.SinkResult;
+import ravenworks.magpie.engine.sink.SinkStatus;
 import ravenworks.magpie.engine.stream.ConsumerRecord;
 
 import java.io.IOException;
@@ -23,7 +26,7 @@ import java.util.concurrent.locks.LockSupport;
 
 
 @Slf4j
-public class DefaultHttpSender implements HttpSender {
+public class HttpSinkHandler implements SinkHandler {
 
     private static final Set<String> RESERVED_CE_KEYS = Set.of(
             "specversion", "id", "source", "type", "time",
@@ -42,12 +45,12 @@ public class DefaultHttpSender implements HttpSender {
     private final CircuitBreaker circuitBreaker;
     private final ExecutorService executor;
     private final AtomicBoolean shutdown = new AtomicBoolean(false);
-    private final Set<CompletableFuture<HttpSendResult>> pendingRequests = ConcurrentHashMap.newKeySet();
+    private final Set<CompletableFuture<SinkResult>> pendingRequests = ConcurrentHashMap.newKeySet();
 
-    public DefaultHttpSender(@NonNull String name,
-                             @NonNull HttpClient httpClient,
-                             @NonNull CircuitBreaker circuitBreaker,
-                             @NonNull HttpSenderConfig config) {
+    public HttpSinkHandler(@NonNull String name,
+                           @NonNull HttpClient httpClient,
+                           @NonNull CircuitBreaker circuitBreaker,
+                           @NonNull HttpSinkHandlerConfig config) {
         this.name = name;
         this.httpClient = httpClient;
         this.circuitBreaker = circuitBreaker;
@@ -62,15 +65,15 @@ public class DefaultHttpSender implements HttpSender {
     }
 
     @Override
-    public CompletableFuture<HttpSendResult> send(@NonNull ConsumerRecord record) {
-        CompletableFuture<HttpSendResult> future = new CompletableFuture<>();
+    public CompletableFuture<SinkResult> handle(@NonNull ConsumerRecord record) {
+        CompletableFuture<SinkResult> future = new CompletableFuture<>();
         this.pendingRequests.add(future);
 
         if (this.shutdown.get()) {
             this.pendingRequests.remove(future);
             return CompletableFuture.completedFuture(
-                    new HttpSendResult()
-                            .setStatus(DeliverStatus.INTERRUPTED)
+                    new SinkResult()
+                            .setStatus(SinkStatus.INTERRUPTED)
                             .setRecord(record));
         }
 
@@ -86,14 +89,14 @@ public class DefaultHttpSender implements HttpSender {
     }
 
     @Override
-    public CompletableFuture<List<HttpSendResult>> send(@NonNull List<ConsumerRecord> records) {
+    public CompletableFuture<List<SinkResult>> handle(@NonNull List<ConsumerRecord> records) {
         @SuppressWarnings("unchecked")
-        CompletableFuture<HttpSendResult>[] futures = records.stream()
-                .map(this::send)
+        CompletableFuture<SinkResult>[] futures = records.stream()
+                .map(this::handle)
                 .toArray(CompletableFuture[]::new);
         return CompletableFuture.allOf(futures)
                 .thenApply(v -> {
-                    List<HttpSendResult> results = new ArrayList<>();
+                    List<SinkResult> results = new ArrayList<>();
                     for (var future : futures) {
                         results.add(future.join());
                     }
@@ -115,18 +118,18 @@ public class DefaultHttpSender implements HttpSender {
         return future;
     }
 
-    private HttpSendResult doSend(ConsumerRecord record) {
+    private SinkResult doSend(ConsumerRecord record) {
         int attempt = 0;
         while (!this.shutdown.get()) {
             if (this.circuitBreaker.isOpen()) {
-                return new HttpSendResult()
-                        .setStatus(DeliverStatus.INTERRUPTED)
+                return new SinkResult()
+                        .setStatus(SinkStatus.INTERRUPTED)
                         .setAttempts(attempt)
                         .setRecord(record);
             }
             if (this.maxAttempts > 0 && attempt >= this.maxAttempts) {
-                return new HttpSendResult()
-                        .setStatus(DeliverStatus.FAILURE)
+                return new SinkResult()
+                        .setStatus(SinkStatus.FAILURE)
                         .setAttempts(attempt)
                         .setRecord(record);
             }
@@ -146,8 +149,8 @@ public class DefaultHttpSender implements HttpSender {
 
                 if (statusCode >= 200 && statusCode < 300) {
                     this.circuitBreaker.recordSuccess();
-                    return new HttpSendResult()
-                            .setStatus(DeliverStatus.SUCCESS)
+                    return new SinkResult()
+                            .setStatus(SinkStatus.SUCCESS)
                             .setAttempts(attempt)
                             .setRecord(record);
                 }
@@ -156,8 +159,8 @@ public class DefaultHttpSender implements HttpSender {
                     this.circuitBreaker.recordFailure();
                     log.warn("[{}] msgId={} HTTP {} is not retryable, giving up",
                             this.name, record.getId(), statusCode);
-                    return new HttpSendResult()
-                            .setStatus(DeliverStatus.FAILURE)
+                    return new SinkResult()
+                            .setStatus(SinkStatus.FAILURE)
                             .setAttempts(attempt)
                             .setError("HTTP " + statusCode)
                             .setRecord(record);
@@ -178,14 +181,14 @@ public class DefaultHttpSender implements HttpSender {
 
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                return new HttpSendResult()
-                        .setStatus(DeliverStatus.INTERRUPTED)
+                return new SinkResult()
+                        .setStatus(SinkStatus.INTERRUPTED)
                         .setAttempts(attempt)
                         .setRecord(record);
             }
         }
-        return new HttpSendResult()
-                .setStatus(DeliverStatus.INTERRUPTED)
+        return new SinkResult()
+                .setStatus(SinkStatus.INTERRUPTED)
                 .setAttempts(attempt)
                 .setRecord(record);
     }
