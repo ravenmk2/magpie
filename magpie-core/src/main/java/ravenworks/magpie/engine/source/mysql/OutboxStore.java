@@ -11,10 +11,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+
 @Slf4j
 public class OutboxStore {
 
     private static final TypeReference<Map<String, String>> HEADERS_TYPE = new TypeReference<>() {
+
     };
 
     private final String name;

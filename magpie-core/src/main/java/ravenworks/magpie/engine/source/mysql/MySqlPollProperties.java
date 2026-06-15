@@ -2,6 +2,7 @@ package ravenworks.magpie.engine.source.mysql;
 
 import lombok.Data;
 
+
 @Data
 public class MySqlPollProperties {
 

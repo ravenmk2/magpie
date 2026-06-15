@@ -1,9 +1,8 @@
 package ravenworks.magpie.common.util;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.experimental.UtilityClass;
-
 import lombok.NonNull;
+import lombok.experimental.UtilityClass;
 
 import java.util.Map;
 
@@ -13,7 +12,7 @@ public final class PropertiesUtils {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    public static <T> void bind(@NonNull T target, Map<String, Object> source) {
+    public static void bind(@NonNull Object target, Map<String, Object> source) {
         if (source == null || source.isEmpty()) {
             return;
         }

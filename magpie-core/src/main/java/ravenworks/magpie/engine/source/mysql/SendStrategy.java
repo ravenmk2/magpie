@@ -5,12 +5,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+
 public interface SendStrategy {
 
     List<List<OutboxRecord>> partition(List<OutboxRecord> records);
 
 
     final class OrderedStrategy implements SendStrategy {
+
         @Override
         public List<List<OutboxRecord>> partition(List<OutboxRecord> records) {
             List<List<OutboxRecord>> batches = new ArrayList<>(records.size());
@@ -19,10 +21,12 @@ public interface SendStrategy {
             }
             return batches;
         }
+
     }
 
 
     final class KeyOrderedStrategy implements SendStrategy {
+
         @Override
         public List<List<OutboxRecord>> partition(List<OutboxRecord> records) {
             List<List<OutboxRecord>> batches = new ArrayList<>();
@@ -50,14 +54,17 @@ public interface SendStrategy {
                     ? record.getBusinessKey()
                     : record.getId();
         }
+
     }
 
 
     final class BestEffortStrategy implements SendStrategy {
+
         @Override
         public List<List<OutboxRecord>> partition(List<OutboxRecord> records) {
             return List.of(List.copyOf(records));
         }
+
     }
 
 }
