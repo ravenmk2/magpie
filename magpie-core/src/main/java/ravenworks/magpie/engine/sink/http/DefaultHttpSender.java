@@ -3,6 +3,7 @@ package ravenworks.magpie.engine.sink.http;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import ravenworks.magpie.common.json.JsonUtils;
+import ravenworks.magpie.common.util.CircuitBreaker;
 import ravenworks.magpie.engine.stream.ConsumerRecord;
 
 import java.io.IOException;
@@ -38,15 +39,18 @@ public class DefaultHttpSender implements HttpSender {
     private final int maxAttempts;
     private final Set<Integer> retryStatusCodes;
     private final HttpClient httpClient;
+    private final CircuitBreaker circuitBreaker;
     private final ExecutorService executor;
     private final AtomicBoolean shutdown = new AtomicBoolean(false);
     private final Set<CompletableFuture<HttpSendResult>> pendingRequests = ConcurrentHashMap.newKeySet();
 
     public DefaultHttpSender(@NonNull String name,
                              @NonNull HttpClient httpClient,
+                             @NonNull CircuitBreaker circuitBreaker,
                              @NonNull HttpSenderConfig config) {
         this.name = name;
         this.httpClient = httpClient;
+        this.circuitBreaker = circuitBreaker;
         this.url = config.getUrl();
         this.timeout = config.getTimeout();
         this.backoff = config.getBackoff();
@@ -114,6 +118,12 @@ public class DefaultHttpSender implements HttpSender {
     private HttpSendResult doSend(ConsumerRecord record) {
         int attempt = 0;
         while (!this.shutdown.get()) {
+            if (this.circuitBreaker.isOpen()) {
+                return new HttpSendResult()
+                        .setStatus(DeliverStatus.INTERRUPTED)
+                        .setAttempts(attempt)
+                        .setRecord(record);
+            }
             if (this.maxAttempts > 0 && attempt >= this.maxAttempts) {
                 return new HttpSendResult()
                         .setStatus(DeliverStatus.FAILURE)
@@ -135,6 +145,7 @@ public class DefaultHttpSender implements HttpSender {
                 int statusCode = response.statusCode();
 
                 if (statusCode >= 200 && statusCode < 300) {
+                    this.circuitBreaker.recordSuccess();
                     return new HttpSendResult()
                             .setStatus(DeliverStatus.SUCCESS)
                             .setAttempts(attempt)
@@ -142,6 +153,7 @@ public class DefaultHttpSender implements HttpSender {
                 }
 
                 if (!this.retryStatusCodes.contains(statusCode)) {
+                    this.circuitBreaker.recordFailure();
                     log.warn("[{}] msgId={} HTTP {} is not retryable, giving up",
                             this.name, record.getId(), statusCode);
                     return new HttpSendResult()
@@ -151,12 +163,14 @@ public class DefaultHttpSender implements HttpSender {
                             .setRecord(record);
                 }
 
+                this.circuitBreaker.recordFailure();
                 long backoffDelay = computeBackoffDelay(this.backoff, this.delayMs, this.maxDelayMs, attempt);
                 log.warn("[{}] msgId={} HTTP {} (attempt {}), retry in {}ms",
                         this.name, record.getId(), statusCode, attempt, backoffDelay);
                 backoff(backoffDelay);
 
             } catch (IOException e) {
+                this.circuitBreaker.recordFailure();
                 long backoffDelay = computeBackoffDelay(this.backoff, this.delayMs, this.maxDelayMs, attempt);
                 log.warn("[{}] msgId={} IO error (attempt {}), retry in {}ms: {}",
                         this.name, record.getId(), attempt, backoffDelay, e.getMessage());
