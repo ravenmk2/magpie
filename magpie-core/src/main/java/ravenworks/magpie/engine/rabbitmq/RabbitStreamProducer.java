@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import ravenworks.magpie.common.util.PartitionUtils;
 import ravenworks.magpie.common.util.TimeUtils;
 import ravenworks.magpie.engine.stream.MessageRecord;
+import ravenworks.magpie.engine.stream.ReservedHeaders;
 import ravenworks.magpie.engine.stream.SendResult;
 import ravenworks.magpie.engine.stream.StreamDefinition;
 import ravenworks.magpie.engine.stream.StreamProducer;
@@ -66,10 +67,10 @@ public class RabbitStreamProducer implements StreamProducer {
                 .messageId(record.getId())
                 .messageBuilder()
                 .applicationProperties()
-                .entry("x-business-key", record.getBusinessKey())
-                .entry("x-tenant-id", record.getTenantId())
-                .entry("x-type", record.getType())
-                .entry("x-event-time", TimeUtils.formatRfc3339(record.getEventTime()));
+                .entry(ReservedHeaders.MSG_BUSINESS_KEY, record.getBusinessKey())
+                .entry(ReservedHeaders.MSG_TENANT_ID, record.getTenantId())
+                .entry(ReservedHeaders.MSG_TYPE, record.getType())
+                .entry(ReservedHeaders.MSG_EVENT_TIME, TimeUtils.formatRfc3339(record.getEventTime()));
         if (record.getHeaders() != null) {
             record.getHeaders().forEach(appProps::entry);
         }

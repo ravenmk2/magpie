@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import ravenworks.magpie.common.util.TimeUtils;
 import ravenworks.magpie.engine.stream.ConsumerRecord;
 import ravenworks.magpie.engine.stream.OffsetTracker;
+import ravenworks.magpie.engine.stream.ReservedHeaders;
 import ravenworks.magpie.engine.stream.StreamConsumer;
 import ravenworks.magpie.engine.stream.StreamDefinition;
 
@@ -24,12 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Slf4j
 public class RabbitStreamConsumer implements StreamConsumer {
 
-    private static final Set<String> KNOWN_KEYS = Set.of(
-            "x-business-key",
-            "x-tenant-id",
-            "x-type",
-            "x-event-time"
-    );
+    private static final Set<String> KNOWN_KEYS = ReservedHeaders.HEADERS;
 
     private final Environment environment;
     private final StreamDefinition definition;
@@ -171,10 +167,10 @@ public class RabbitStreamConsumer implements StreamConsumer {
         }
         Map<String, Object> appProps = msg.getApplicationProperties();
         if (appProps != null) {
-            record.setType((String) appProps.get("x-type"));
-            record.setTenantId((String) appProps.get("x-tenant-id"));
-            record.setBusinessKey((String) appProps.get("x-business-key"));
-            String timeStr = (String) appProps.get("x-event-time");
+            record.setType((String) appProps.get(ReservedHeaders.MSG_TYPE));
+            record.setTenantId((String) appProps.get(ReservedHeaders.MSG_TENANT_ID));
+            record.setBusinessKey((String) appProps.get(ReservedHeaders.MSG_BUSINESS_KEY));
+            String timeStr = (String) appProps.get(ReservedHeaders.MSG_EVENT_TIME);
             if (timeStr != null) {
                 record.setEventTime(TimeUtils.parseRfc3339(timeStr));
             }
