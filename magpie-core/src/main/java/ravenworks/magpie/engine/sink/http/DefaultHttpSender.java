@@ -43,8 +43,10 @@ public class DefaultHttpSender implements HttpSender {
     private final Set<CompletableFuture<HttpSendResult>> pendingRequests = ConcurrentHashMap.newKeySet();
 
     public DefaultHttpSender(@NonNull String name,
+                             @NonNull HttpClient httpClient,
                              @NonNull HttpSenderConfig config) {
         this.name = name;
+        this.httpClient = httpClient;
         this.url = config.getUrl();
         this.timeout = config.getTimeout();
         this.backoff = config.getBackoff();
@@ -52,9 +54,6 @@ public class DefaultHttpSender implements HttpSender {
         this.maxDelayMs = config.getMaxDelayMs();
         this.maxAttempts = config.getMaxAttempts();
         this.retryStatusCodes = config.getRetryStatusCodes();
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofMillis(this.timeout))
-                .build();
         this.executor = Executors.newVirtualThreadPerTaskExecutor();
     }
 
@@ -105,11 +104,6 @@ public class DefaultHttpSender implements HttpSender {
         Thread.ofVirtual().start(() -> {
             while (!this.pendingRequests.isEmpty()) {
                 LockSupport.parkNanos(10_000_000L);
-            }
-            try {
-                this.httpClient.close();
-            } catch (Exception e) {
-                log.warn("[{}] Error closing HttpClient", this.name, e);
             }
             this.executor.shutdown();
             future.complete(null);
@@ -226,6 +220,5 @@ public class DefaultHttpSender implements HttpSender {
         }
         return delay;
     }
-
 
 }
