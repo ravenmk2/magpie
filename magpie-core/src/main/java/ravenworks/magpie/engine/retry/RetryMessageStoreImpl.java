@@ -69,6 +69,7 @@ public class RetryMessageStoreImpl implements RetryMessageStore {
         retryEntity.setId(Uuids.uuid7Hex());
         retryEntity.setConsumer(consumer);
         retryEntity.setLogId(logEntity.getId());
+        retryEntity.setOffset(record.getOffset());
         retryEntity.setAttempts(0);
         retryEntity.setRetryAt(LocalDateTime.now());
         retryEntity.setBusinessKey(record.getBusinessKey());
@@ -123,6 +124,7 @@ public class RetryMessageStoreImpl implements RetryMessageStore {
         return new RetryRecord()
                 .setId(retry.getId())
                 .setLogId(log.getId())
+                .setOffset(retry.getOffset())
                 .setMessageId(log.getMessageId())
                 .setType(log.getType())
                 .setEventTime(log.getEventTime())

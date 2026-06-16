@@ -24,6 +24,9 @@ public class RetryMessageEntity implements Serializable {
     @Column(name = "log_id", nullable = false, length = 32)
     private String logId;
 
+    @Column(name = "offset", nullable = false)
+    private long offset;
+
     @Column(name = "attempts", nullable = false)
     private int attempts;
 

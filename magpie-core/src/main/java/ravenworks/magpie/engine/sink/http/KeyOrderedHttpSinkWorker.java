@@ -133,6 +133,7 @@ class KeyOrderedHttpSinkWorker extends AbstractHttpSinkWorker {
 
     private DeliverResult deliver(ravenworks.magpie.engine.retry.RetryRecord retryRecord) {
         var record = new ConsumerRecord()
+                .setOffset(retryRecord.getOffset())
                 .setId(retryRecord.getMessageId())
                 .setType(retryRecord.getType())
                 .setEventTime(retryRecord.getEventTime())

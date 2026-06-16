@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS `magpie_retry_message`
     `id`           CHAR(32)     NOT NULL COMMENT 'ID',
     `consumer`     VARCHAR(128) NOT NULL DEFAULT '' COMMENT '消费者名称',
     `log_id`       CHAR(32)     NOT NULL DEFAULT '' COMMENT '消息记录 ID [FK|magpie_message_log.id]',
+    `offset`       BIGINT       NOT NULL DEFAULT -1 COMMENT '消息偏移量',
     `attempts`     INT          NOT NULL DEFAULT 0 COMMENT '尝试次数',
     `retry_at`     DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '下次可重试时间',
     `business_key` VARCHAR(128) NOT NULL DEFAULT '' COMMENT '业务键',

@@ -104,6 +104,7 @@ class BestEffortHttpSinkWorker extends AbstractHttpSinkWorker {
         }
         for (var entry : entries) {
             var record = new ConsumerRecord()
+                    .setOffset(entry.getOffset())
                     .setId(entry.getMessageId())
                     .setType(entry.getType())
                     .setEventTime(entry.getEventTime())

@@ -14,6 +14,7 @@ public class RetryRecord implements Serializable {
 
     private String id;
     private String logId;
+    private long offset;
     private String messageId;
     private String type;
     private LocalDateTime eventTime;
