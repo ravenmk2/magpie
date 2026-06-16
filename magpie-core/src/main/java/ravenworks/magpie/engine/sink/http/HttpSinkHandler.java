@@ -123,7 +123,7 @@ public class HttpSinkHandler implements SinkHandler {
         while (!this.shutdown.get()) {
             if (this.circuitBreaker.isOpen()) {
                 return new SinkResult()
-                        .setStatus(SinkStatus.INTERRUPTED)
+                        .setStatus(SinkStatus.BACKOFF)
                         .setAttempts(attempt)
                         .setRecord(record);
             }

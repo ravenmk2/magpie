@@ -25,7 +25,7 @@ import java.util.concurrent.locks.LockSupport;
 
 
 @Slf4j
-abstract class AbstractHttpSinkWorker {
+abstract class AbstractHttpSinkWorker implements ravenworks.magpie.engine.sink.common.SinkWorker {
 
     static final int BATCH_SIZE = 100;
     static final Object POLL_SIGNAL = new Object();
@@ -65,12 +65,12 @@ abstract class AbstractHttpSinkWorker {
                 config.circuitBreakerResetMs);
     }
 
-    void start() {
+    public void start() {
         this.consumer.start();
         this.eventLoop.start();
     }
 
-    java.util.concurrent.CompletableFuture<Void> shutdown() {
+    public java.util.concurrent.CompletableFuture<Void> shutdown() {
         this.stopped = true;
         Thread t = this.eventLoopThread;
         if (t != null) {

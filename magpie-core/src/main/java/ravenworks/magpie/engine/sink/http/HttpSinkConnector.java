@@ -2,14 +2,19 @@ package ravenworks.magpie.engine.sink.http;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import ravenworks.magpie.common.util.CircuitBreaker;
 import ravenworks.magpie.engine.retry.RetryMessageStore;
 import ravenworks.magpie.engine.sink.OrderingGuarantee;
 import ravenworks.magpie.engine.sink.SinkConnector;
+import ravenworks.magpie.engine.sink.common.OrderedSinkWorker;
+import ravenworks.magpie.engine.sink.common.SinkWorker;
 import ravenworks.magpie.engine.stream.StreamConsumer;
 import ravenworks.magpie.engine.stream.StreamDefinition;
 import ravenworks.magpie.engine.stream.StreamProvider;
 import ravenworks.magpie.engine.stream.StreamRegistry;
 
+import java.net.http.HttpClient;
+import java.time.Duration;
 import java.util.*;
 
 
@@ -41,8 +46,8 @@ public class HttpSinkConnector implements SinkConnector {
     static final String DEFAULT_STATUS_CODES = "500-599,408,429";
     static final String DEFAULT_INPLACE_ATTEMPTS = "3";
     static final String DEFAULT_EMPTY_POLL_THRESHOLD = "3";
-    static final String DEFAULT_FAILURE_THRESHOLD = "20";
-    static final String DEFAULT_HALF_OPEN_SUCCESSES = "10";
+    static final String DEFAULT_FAILURE_THRESHOLD = "10";
+    static final String DEFAULT_HALF_OPEN_SUCCESSES = "6";
     static final String DEFAULT_RESET_MS = "600000";
     static final String DEFAULT_ORDERING_GUARANTEE = "ORDERED";
 
@@ -52,7 +57,8 @@ public class HttpSinkConnector implements SinkConnector {
     private final String name;
     private final String topic;
     private final HttpConfig config;
-    private final List<AbstractHttpSinkWorker> workers = new ArrayList<>();
+    private final HttpClient httpClient;
+    private final List<SinkWorker> workers = new ArrayList<>();
 
     public HttpSinkConnector(@NonNull StreamProvider provider,
                              @NonNull StreamRegistry streamRegistry,
@@ -66,6 +72,9 @@ public class HttpSinkConnector implements SinkConnector {
         this.name = name;
         this.topic = topic;
         this.config = parseConfig(properties);
+        this.httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofMillis(this.config.timeout))
+                .build();
     }
 
     @Override
@@ -98,16 +107,31 @@ public class HttpSinkConnector implements SinkConnector {
     @Override
     public java.util.concurrent.CompletableFuture<Void> shutdown() {
         var futures = this.workers.stream()
-                .map(AbstractHttpSinkWorker::shutdown)
+                .map(SinkWorker::shutdown)
                 .toArray(java.util.concurrent.CompletableFuture[]::new);
         return java.util.concurrent.CompletableFuture.allOf(futures)
                 .thenRun(() -> log.info("HTTP sink '{}' shutdown", this.name));
     }
 
-    private AbstractHttpSinkWorker createWorker(String name, StreamConsumer consumer) {
+    private SinkWorker createWorker(String name, StreamConsumer consumer) {
         var workerName = name + "-" + consumer.partition();
         return switch (this.config.orderingGuarantee) {
-            case ORDERED -> new OrderedHttpSinkWorker(workerName, consumer.partition(), consumer, this.config);
+            case ORDERED -> {
+                var cb = new CircuitBreaker(workerName,
+                        this.config.circuitBreakerFailureThreshold,
+                        this.config.circuitBreakerHalfOpenSuccessCount,
+                        this.config.circuitBreakerResetMs);
+                var handlerConfig = new HttpSinkHandlerConfig();
+                handlerConfig.setUrl(this.config.url);
+                handlerConfig.setTimeout(this.config.timeout);
+                handlerConfig.setBackoff(this.config.backoff);
+                handlerConfig.setDelayMs(this.config.delay);
+                handlerConfig.setMaxDelayMs(this.config.maxDelay);
+                handlerConfig.setMaxAttempts(-1);
+                handlerConfig.setRetryStatusCodes(this.config.retryStatusCodes);
+                var handler = new HttpSinkHandler(workerName, this.httpClient, cb, handlerConfig);
+                yield new OrderedSinkWorker(workerName, consumer, handler, cb);
+            }
             case KEY_ORDERED ->
                     new KeyOrderedHttpSinkWorker(workerName, consumer.partition(), consumer, this.retryStore, this.config);
             case BEST_EFFORT ->

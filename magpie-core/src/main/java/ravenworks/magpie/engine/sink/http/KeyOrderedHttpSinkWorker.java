@@ -34,7 +34,7 @@ class KeyOrderedHttpSinkWorker extends AbstractHttpSinkWorker {
     }
 
     @Override
-    void start() {
+    public void start() {
         super.start();
         this.blockedKeys.addAll(this.retryStore.listKeys(this.name));
         if (!this.blockedKeys.isEmpty()) {
@@ -72,7 +72,7 @@ class KeyOrderedHttpSinkWorker extends AbstractHttpSinkWorker {
         long lastCompletedOffset = processBatch(batch);
         if (!batch.isEmpty()) {
             if (lastCompletedOffset >= 0) {
-                this.consumer.commit(lastCompletedOffset + 1);
+                this.consumer.commit(lastCompletedOffset);
             }
             this.emptyPollCount = 0;
         } else {

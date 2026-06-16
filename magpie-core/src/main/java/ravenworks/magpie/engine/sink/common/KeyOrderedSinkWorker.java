@@ -82,7 +82,7 @@ public class KeyOrderedSinkWorker implements SinkWorker {
     private void onPreShutdown() {
         long lastOffset = this.lastOffset.get();
         if (lastOffset >= 0) {
-            this.consumer.commit(lastOffset + 1);
+            this.consumer.commit(lastOffset);
         }
         try {
             this.consumer.stop();

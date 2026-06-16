@@ -127,7 +127,7 @@ public class PrintSinkConnector implements SinkConnector {
                 log(record);
             }
             if (!batch.isEmpty()) {
-                this.consumer.commit(batch.getLast().getOffset() + 1);
+                this.consumer.commit(batch.getLast().getOffset());
             }
             this.eventLoop.enqueue(POLL_SIGNAL);
         }

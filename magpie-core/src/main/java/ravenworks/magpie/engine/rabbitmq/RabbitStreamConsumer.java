@@ -5,11 +5,7 @@ import com.rabbitmq.stream.MessageHandler.Context;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import ravenworks.magpie.common.util.TimeUtils;
-import ravenworks.magpie.engine.stream.ConsumerRecord;
-import ravenworks.magpie.engine.stream.OffsetTracker;
-import ravenworks.magpie.engine.stream.ReservedHeaders;
-import ravenworks.magpie.engine.stream.StreamConsumer;
-import ravenworks.magpie.engine.stream.StreamDefinition;
+import ravenworks.magpie.engine.stream.*;
 
 import java.time.Duration;
 import java.util.*;
@@ -123,7 +119,7 @@ public class RabbitStreamConsumer implements StreamConsumer {
     @Override
     public void commit(long offset) {
         try {
-            this.offsetTracker.write(this.name, this.partition, offset);
+            this.offsetTracker.write(this.name, this.partition, offset + 1);
         } catch (Exception e) {
             log.warn("[{}] partition={} failed to commit offset={}",
                     this.name, this.partition, offset, e);
@@ -144,10 +140,10 @@ public class RabbitStreamConsumer implements StreamConsumer {
     }
 
     private static OffsetSpecification resolveOffset(long offset) {
-        if (offset < 0) {
+        if (offset < -1) {
             return OffsetSpecification.next();
         }
-        if (offset == 0) {
+        if (offset == -1) {
             return OffsetSpecification.first();
         }
         return OffsetSpecification.offset(offset);

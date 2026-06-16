@@ -9,6 +9,8 @@ public enum SinkStatus {
 
     FAILURE,
 
+    BACKOFF,
+
     INTERRUPTED
 
 }

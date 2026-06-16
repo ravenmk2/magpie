@@ -8,6 +8,8 @@ import ravenworks.magpie.domain.repository.ConsumerOffsetRepository;
 
 public class OffsetTrackerImpl implements OffsetTracker {
 
+    private static final long INITIAL_OFFSET = -1L;
+
     private final ConsumerOffsetRepository repository;
 
     public OffsetTrackerImpl(@NonNull ConsumerOffsetRepository repository) {
@@ -22,8 +24,8 @@ public class OffsetTrackerImpl implements OffsetTracker {
         if (existing.isPresent()) {
             return existing.get().getOffset();
         }
-        this.repository.save(new ConsumerOffsetEntity(id, name, partition, 0L));
-        return 0L;
+        this.repository.save(new ConsumerOffsetEntity(id, name, partition, INITIAL_OFFSET));
+        return INITIAL_OFFSET;
     }
 
     @Override
