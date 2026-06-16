@@ -1,9 +1,9 @@
 package ravenworks.magpie.engine.source.mysql;
 
+import ravenworks.magpie.engine.stream.MessageUtils;
+
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 
 public interface SendStrategy {
@@ -29,24 +29,7 @@ public interface SendStrategy {
 
         @Override
         public List<List<OutboxRecord>> partition(List<OutboxRecord> records) {
-            List<List<OutboxRecord>> batches = new ArrayList<>();
-            List<OutboxRecord> current = new ArrayList<>();
-            Set<String> seenKeys = new HashSet<>();
-
-            for (var record : records) {
-                String key = resolveKey(record);
-                if (seenKeys.contains(key)) {
-                    batches.add(List.copyOf(current));
-                    current.clear();
-                    seenKeys.clear();
-                }
-                seenKeys.add(key);
-                current.add(record);
-            }
-            if (!current.isEmpty()) {
-                batches.add(List.copyOf(current));
-            }
-            return batches;
+            return MessageUtils.batchByUniqueKey(records, KeyOrderedStrategy::resolveKey);
         }
 
         private static String resolveKey(OutboxRecord record) {
