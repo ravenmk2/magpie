@@ -104,10 +104,7 @@ public class OrderedSinkWorker implements SinkWorker {
             return;
         }
         var batch = this.consumer.poll(this.batchSize, Duration.ofMillis(50));
-        long lo = this.lastOffset.get();
-        if (lo >= 0) {
-            batch = batch.stream().filter(r -> r.getOffset() > lo).toList();
-        }
+        batch = SinkWorkerUtils.filterByOffset(this.name, batch, this.lastOffset.get());
         if (!batch.isEmpty()) {
             processBatch(batch);
             long offset = this.lastOffset.get();
