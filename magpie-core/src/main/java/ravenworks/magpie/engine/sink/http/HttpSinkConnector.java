@@ -6,6 +6,7 @@ import ravenworks.magpie.common.util.CircuitBreaker;
 import ravenworks.magpie.engine.retry.RetryMessageStore;
 import ravenworks.magpie.engine.sink.OrderingGuarantee;
 import ravenworks.magpie.engine.sink.SinkConnector;
+import ravenworks.magpie.engine.sink.common.BestEffortSinkWorker;
 import ravenworks.magpie.engine.sink.common.OrderedSinkWorker;
 import ravenworks.magpie.engine.sink.common.SinkWorker;
 import ravenworks.magpie.engine.stream.StreamConsumer;
@@ -38,6 +39,7 @@ public class HttpSinkConnector implements SinkConnector {
     static final String PROP_CIRCUIT_BREAKER_RESET_MS = "circuitBreaker.resetMs";
 
     static final String PROP_ORDERING_GUARANTEE = "orderingGuarantee";
+    static final String PROP_BATCH_SIZE = "batchSize";
 
     static final String DEFAULT_TIMEOUT = "10000";
     static final String DEFAULT_BACKOFF = "fixed";
@@ -50,6 +52,7 @@ public class HttpSinkConnector implements SinkConnector {
     static final String DEFAULT_HALF_OPEN_SUCCESSES = "6";
     static final String DEFAULT_RESET_MS = "600000";
     static final String DEFAULT_ORDERING_GUARANTEE = "ORDERED";
+    static final String DEFAULT_BATCH_SIZE = "100";
 
     private final StreamProvider provider;
     private final StreamRegistry streamRegistry;
@@ -114,29 +117,54 @@ public class HttpSinkConnector implements SinkConnector {
     }
 
     private SinkWorker createWorker(String name, StreamConsumer consumer) {
-        var workerName = name + "-" + consumer.partition();
         return switch (this.config.orderingGuarantee) {
-            case ORDERED -> {
-                var cb = new CircuitBreaker(workerName,
-                        this.config.circuitBreakerFailureThreshold,
-                        this.config.circuitBreakerHalfOpenSuccessCount,
-                        this.config.circuitBreakerResetMs);
-                var handlerConfig = new HttpSinkHandlerConfig();
-                handlerConfig.setUrl(this.config.url);
-                handlerConfig.setTimeout(this.config.timeout);
-                handlerConfig.setBackoff(this.config.backoff);
-                handlerConfig.setDelayMs(this.config.delay);
-                handlerConfig.setMaxDelayMs(this.config.maxDelay);
-                handlerConfig.setMaxAttempts(-1);
-                handlerConfig.setRetryStatusCodes(this.config.retryStatusCodes);
-                var handler = new HttpSinkHandler(workerName, this.httpClient, cb, handlerConfig);
-                yield new OrderedSinkWorker(workerName, consumer, handler, cb);
-            }
-            case KEY_ORDERED ->
-                    new KeyOrderedHttpSinkWorker(workerName, consumer.partition(), consumer, this.retryStore, this.config);
-            case BEST_EFFORT ->
-                    new BestEffortHttpSinkWorker(workerName, consumer.partition(), consumer, this.retryStore, this.config);
+            case ORDERED -> createOrderedWorker(name, consumer);
+            case KEY_ORDERED -> createKeyOrderedWorker(name, consumer);
+            case BEST_EFFORT -> createBestEffortWorker(name, consumer);
         };
+    }
+
+    private OrderedSinkWorker createOrderedWorker(String name, StreamConsumer consumer) {
+        var workerName = name + "-" + consumer.partition();
+        var cb = createCircuitBreaker(workerName);
+        var handler = new HttpSinkHandler(
+                workerName, this.httpClient, cb, createHandlerConfig(-1));
+        return new OrderedSinkWorker(
+                workerName, consumer, handler, cb, this.config.batchSize);
+    }
+
+    private KeyOrderedHttpSinkWorker createKeyOrderedWorker(String name, StreamConsumer consumer) {
+        var workerName = name + "-" + consumer.partition();
+        return new KeyOrderedHttpSinkWorker(
+                workerName, consumer.partition(), consumer, this.retryStore, this.config);
+    }
+
+    private BestEffortSinkWorker createBestEffortWorker(String name, StreamConsumer consumer) {
+        var workerName = name + "-" + consumer.partition();
+        var cb = createCircuitBreaker(workerName);
+        var handler = new HttpSinkHandler(
+                workerName, this.httpClient, cb, createHandlerConfig(this.config.retryInplaceAttempts));
+        return new BestEffortSinkWorker(
+                workerName, consumer, handler, cb, this.retryStore, this.config.batchSize);
+    }
+
+    private CircuitBreaker createCircuitBreaker(String workerName) {
+        return new CircuitBreaker(workerName,
+                this.config.circuitBreakerFailureThreshold,
+                this.config.circuitBreakerHalfOpenSuccessCount,
+                this.config.circuitBreakerResetMs);
+    }
+
+    private HttpSinkHandlerConfig createHandlerConfig(int maxAttempts) {
+        var cfg = new HttpSinkHandlerConfig();
+        cfg.setUrl(this.config.url);
+        cfg.setTimeout(this.config.timeout);
+        cfg.setBackoff(this.config.backoff);
+        cfg.setDelayMs(this.config.delay);
+        cfg.setMaxDelayMs(this.config.maxDelay);
+        cfg.setMaxAttempts(maxAttempts);
+        cfg.setRetryStatusCodes(this.config.retryStatusCodes);
+        return cfg;
     }
 
     static HttpConfig parseConfig(Map<String, Object> props) {
@@ -160,9 +188,10 @@ public class HttpSinkConnector implements SinkConnector {
         long resetMs = Long.parseLong(getString(props, PROP_CIRCUIT_BREAKER_RESET_MS, DEFAULT_RESET_MS));
         String orderingGuaranteeStr = getString(props, PROP_ORDERING_GUARANTEE, DEFAULT_ORDERING_GUARANTEE);
         OrderingGuarantee orderingGuarantee = parseOrderingGuarantee(orderingGuaranteeStr);
+        int batchSize = Integer.parseInt(getString(props, PROP_BATCH_SIZE, DEFAULT_BATCH_SIZE));
         return new HttpConfig(url, timeout, backoff, delay, maxDelay, retryStatusCodes,
                 failureThreshold, halfOpenSuccesses, resetMs,
-                inplaceAttempts, emptyPollThreshold, orderingGuarantee);
+                inplaceAttempts, emptyPollThreshold, orderingGuarantee, batchSize);
     }
 
     private static String getString(Map<String, Object> props, String key, String defaultValue) {
@@ -217,13 +246,14 @@ public class HttpSinkConnector implements SinkConnector {
         final int retryInplaceAttempts;
         final int emptyPollThreshold;
         final OrderingGuarantee orderingGuarantee;
+        final int batchSize;
 
         HttpConfig(String url, int timeout, String backoff,
                    long delay, long maxDelay, Set<Integer> retryStatusCodes,
                    int circuitBreakerFailureThreshold, int circuitBreakerHalfOpenSuccessCount,
                    long circuitBreakerResetMs,
                    int retryInplaceAttempts, int emptyPollThreshold,
-                   OrderingGuarantee orderingGuarantee) {
+                   OrderingGuarantee orderingGuarantee, int batchSize) {
             this.url = url;
             this.timeout = timeout;
             this.backoff = backoff;
@@ -236,6 +266,7 @@ public class HttpSinkConnector implements SinkConnector {
             this.retryInplaceAttempts = retryInplaceAttempts;
             this.emptyPollThreshold = emptyPollThreshold;
             this.orderingGuarantee = orderingGuarantee;
+            this.batchSize = batchSize;
         }
 
     }

@@ -21,7 +21,6 @@ import java.util.concurrent.locks.LockSupport;
 public class OrderedSinkWorker implements SinkWorker {
 
     private static final Object POLL_SIGNAL = new Object();
-    private static final int BATCH_SIZE = 100;
 
     private final String name;
     private final StreamConsumer consumer;
@@ -29,17 +28,20 @@ public class OrderedSinkWorker implements SinkWorker {
     private final CircuitBreaker circuitBreaker;
     private final EventLoop eventLoop;
     private final AtomicLong lastOffset = new AtomicLong(-1);
+    private final int batchSize;
 
     private volatile Thread loopThread;
 
     public OrderedSinkWorker(@NonNull String name,
                              @NonNull StreamConsumer consumer,
                              @NonNull SinkHandler handler,
-                             @NonNull CircuitBreaker circuitBreaker) {
+                             @NonNull CircuitBreaker circuitBreaker,
+                             int batchSize) {
         this.name = name;
         this.consumer = consumer;
         this.handler = handler;
         this.circuitBreaker = circuitBreaker;
+        this.batchSize = batchSize;
         this.eventLoop = new EventLoop("snk-" + name, 1_000, this::dispatch);
     }
 
@@ -101,7 +103,7 @@ public class OrderedSinkWorker implements SinkWorker {
         if (this.circuitBreaker.isOpen()) {
             return;
         }
-        var batch = this.consumer.poll(BATCH_SIZE, Duration.ofMillis(50));
+        var batch = this.consumer.poll(this.batchSize, Duration.ofMillis(50));
         long lo = this.lastOffset.get();
         if (lo >= 0) {
             batch = batch.stream().filter(r -> r.getOffset() > lo).toList();
