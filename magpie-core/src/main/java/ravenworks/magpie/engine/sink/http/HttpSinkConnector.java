@@ -7,6 +7,7 @@ import ravenworks.magpie.engine.retry.RetryMessageStore;
 import ravenworks.magpie.engine.sink.OrderingGuarantee;
 import ravenworks.magpie.engine.sink.SinkConnector;
 import ravenworks.magpie.engine.sink.common.BestEffortSinkWorker;
+import ravenworks.magpie.engine.sink.common.KeyOrderedSinkWorker;
 import ravenworks.magpie.engine.sink.common.OrderedSinkWorker;
 import ravenworks.magpie.engine.sink.common.SinkWorker;
 import ravenworks.magpie.engine.stream.StreamConsumer;
@@ -133,10 +134,13 @@ public class HttpSinkConnector implements SinkConnector {
                 workerName, consumer, handler, cb, this.config.batchSize);
     }
 
-    private KeyOrderedHttpSinkWorker createKeyOrderedWorker(String name, StreamConsumer consumer) {
+    private KeyOrderedSinkWorker createKeyOrderedWorker(String name, StreamConsumer consumer) {
         var workerName = name + "-" + consumer.partition();
-        return new KeyOrderedHttpSinkWorker(
-                workerName, consumer.partition(), consumer, this.retryStore, this.config);
+        var cb = createCircuitBreaker(workerName);
+        var handler = new HttpSinkHandler(
+                workerName, this.httpClient, cb, createHandlerConfig(this.config.retryInplaceAttempts));
+        return new KeyOrderedSinkWorker(
+                workerName, consumer, handler, cb, this.retryStore, this.config.batchSize);
     }
 
     private BestEffortSinkWorker createBestEffortWorker(String name, StreamConsumer consumer) {

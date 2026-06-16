@@ -16,7 +16,7 @@ public interface RetryMessageRepository extends JpaRepository<RetryMessageEntity
     @Query("SELECT DISTINCT r.businessKey FROM RetryMessageEntity r WHERE r.consumer = :consumer")
     Set<String> findDistinctBusinessKeysByConsumer(@Param("consumer") String consumer);
 
-    List<RetryMessageEntity> findByConsumerOrderByIdAsc(String consumer, Pageable pageable);
+    List<RetryMessageEntity> findByConsumerOrderByOffsetAsc(String consumer, Pageable pageable);
 
     List<RetryMessageEntity> findByConsumerAndRetryAtBeforeOrderByIdAsc(String consumer, LocalDateTime retryAt, Pageable pageable);
 

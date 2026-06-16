@@ -126,6 +126,7 @@ CREATE TABLE IF NOT EXISTS `magpie_retry_message`
     `updated_at`   DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
 
     PRIMARY KEY (`id`),
+    INDEX `idx_consumer_offset` (`consumer`, `offset`),
     INDEX `idx_consumer_retry_at` (`consumer`, `retry_at`)
 )
     ENGINE = InnoDB

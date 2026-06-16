@@ -39,7 +39,7 @@ public class RetryMessageStoreImpl implements RetryMessageStore {
 
     @Override
     public List<RetryRecord> list(@NonNull String consumer, int count) {
-        var entities = this.retryMessageRepository.findByConsumerOrderByIdAsc(consumer, PageRequest.of(0, count));
+        var entities = this.retryMessageRepository.findByConsumerOrderByOffsetAsc(consumer, PageRequest.of(0, count));
         return toRetryRecords(entities);
     }
 
