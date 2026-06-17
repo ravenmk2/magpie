@@ -64,16 +64,15 @@ public class RabbitStreamConsumer implements StreamConsumer {
                 .stream(streamName)
                 .name("magpie-" + this.name + "-" + this.partition)
                 .flow()
-                .initialCredits(10)
                 .strategy(ConsumerFlowStrategy.creditOnProcessedMessageCount(10, 0.5))
+                .builder()
+                .manualTrackingStrategy()
                 .builder()
                 .subscriptionListener(ctx -> {
                     long offset = this.offsetTracker.read(this.name, this.partition);
                     log.info("[{}] partition={} resuming from offset={}", this.name, this.partition, offset);
                     ctx.offsetSpecification(resolveOffset(offset));
                 })
-                .manualTrackingStrategy()
-                .builder()
                 .messageHandler((ctx, msg) -> {
                     try {
                         this.queue.put(new QueuedItem(ctx, msg));
