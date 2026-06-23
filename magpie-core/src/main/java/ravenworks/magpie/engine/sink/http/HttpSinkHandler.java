@@ -1,5 +1,10 @@
 package ravenworks.magpie.engine.sink.http;
 
+import io.cloudevents.CloudEvent;
+import io.cloudevents.core.builder.CloudEventBuilder;
+import io.cloudevents.core.format.EventFormat;
+import io.cloudevents.core.provider.EventFormatProvider;
+import io.cloudevents.jackson.JsonFormat;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import ravenworks.magpie.common.json.JsonUtils;
@@ -14,9 +19,11 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.*;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -28,10 +35,9 @@ import java.util.concurrent.locks.LockSupport;
 @Slf4j
 public class HttpSinkHandler implements SinkHandler {
 
-    private static final Set<String> RESERVED_CE_KEYS = Set.of(
-            "specversion", "id", "source", "type", "time",
-            "subject", "datacontenttype", "data", "headers"
-    );
+    private static final URI SOURCE = URI.create("magpie");
+    private static final EventFormat JSON_FORMAT =
+            EventFormatProvider.getInstance().resolveFormat(JsonFormat.CONTENT_TYPE);
 
     private final String name;
     private final String url;
@@ -135,13 +141,13 @@ public class HttpSinkHandler implements SinkHandler {
             }
             attempt++;
 
-            String json = buildCloudEventJson(record);
+            byte[] body = JSON_FORMAT.serialize(buildCloudEvent(record));
             try {
                 var request = HttpRequest.newBuilder()
                         .uri(URI.create(this.url))
                         .timeout(Duration.ofMillis(this.timeout))
-                        .header("Content-Type", "application/cloudevents+json")
-                        .POST(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))
+                        .header("Content-Type", JsonFormat.CONTENT_TYPE)
+                        .POST(HttpRequest.BodyPublishers.ofByteArray(body))
                         .build();
 
                 var response = this.httpClient.send(request, HttpResponse.BodyHandlers.ofString());
@@ -200,34 +206,32 @@ public class HttpSinkHandler implements SinkHandler {
         }
     }
 
-    static String buildCloudEventJson(ConsumerRecord record) {
-        Map<String, Object> ce = new LinkedHashMap<>();
-        ce.put("specversion", "1.0");
-        ce.put("id", record.getId());
-        ce.put("source", "magpie");
-        ce.put("type", record.getType());
+    static CloudEvent buildCloudEvent(ConsumerRecord record) {
+        var builder = CloudEventBuilder.v1()
+                .withId(record.getId())
+                .withSource(SOURCE)
+                .withType(record.getType())
+                .withSubject(record.getTopic())
+                .withDataContentType("application/json");
+
         if (record.getEventTime() != null) {
-            ce.put("time", record.getEventTime().toString());
+            builder.withTime(record.getEventTime().atZone(ZoneId.systemDefault()).toOffsetDateTime());
         }
-        ce.put("subject", record.getTopic());
-        ce.put("datacontenttype", "application/json");
-
-        String payloadStr = record.getPayload() != null
-                ? new String(record.getPayload(), StandardCharsets.UTF_8)
-                : "";
-        ce.put("data", payloadStr);
-
-        Map<String, String> extHeaders = new LinkedHashMap<>();
-        if (record.getHeaders() != null) {
-            for (var entry : record.getHeaders().entrySet()) {
-                if (!RESERVED_CE_KEYS.contains(entry.getKey().toLowerCase())) {
-                    extHeaders.put(entry.getKey(), entry.getValue());
-                }
-            }
+        if (record.getPayload() != null) {
+            builder.withData(record.getPayload());
         }
-        ce.put("headers", extHeaders);
+        if (record.getTenantId() != null && !record.getTenantId().isBlank()) {
+            builder.withExtension("xtenantid", record.getTenantId());
+        }
+        if (record.getBusinessKey() != null && !record.getBusinessKey().isBlank()) {
+            builder.withExtension("xbusinesskey", record.getBusinessKey());
+        }
+        builder.withExtension("xoffset", String.valueOf(record.getOffset()));
+        if (record.getHeaders() != null && !record.getHeaders().isEmpty()) {
+            builder.withExtension("xheaders", JsonUtils.encode(record.getHeaders()));
+        }
 
-        return JsonUtils.encode(ce);
+        return builder.build();
     }
 
     static long computeBackoffDelay(String backoff, long delay, long maxDelay, int attempt) {
