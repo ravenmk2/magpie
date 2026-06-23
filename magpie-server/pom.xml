@@ -32,7 +32,7 @@
 
         <dependency>
             <groupId>io.cloudevents</groupId>
-            <artifactId>cloudevents-spring</artifactId>
+            <artifactId>cloudevents-json-jackson</artifactId>
         </dependency>
 
         <dependency>
