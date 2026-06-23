@@ -14,6 +14,9 @@ import ravenworks.magpie.engine.sink.*;
 import ravenworks.magpie.engine.sink.http.HttpSinkProvider;
 import ravenworks.magpie.engine.sink.print.PrintSinkProvider;
 import ravenworks.magpie.engine.source.*;
+import ravenworks.magpie.engine.source.http.HttpSourceProvider;
+import ravenworks.magpie.engine.source.http.HttpSourceRouter;
+import ravenworks.magpie.engine.source.http.HttpSourceRouterImpl;
 import ravenworks.magpie.engine.source.mysql.MySqlPollSourceProvider;
 import ravenworks.magpie.engine.source.sample.SampleSourceProvider;
 import ravenworks.magpie.engine.stream.*;
@@ -41,10 +44,17 @@ public class EngineConfiguration {
     }
 
     @Bean
-    public static SourceFactory sourceFactory(@NonNull List<SourceProvider> providers) {
+    public static HttpSourceRouter httpSourceRouter() {
+        return new HttpSourceRouterImpl();
+    }
+
+    @Bean
+    public static SourceFactory sourceFactory(@NonNull List<SourceProvider> providers,
+                                              @NonNull HttpSourceRouter httpSourceRouter) {
         var merged = new ArrayList<>(providers);
         merged.add(new SampleSourceProvider());
         merged.add(new MySqlPollSourceProvider());
+        merged.add(new HttpSourceProvider(httpSourceRouter));
         return new SourceFactoryImpl(merged);
     }
 
