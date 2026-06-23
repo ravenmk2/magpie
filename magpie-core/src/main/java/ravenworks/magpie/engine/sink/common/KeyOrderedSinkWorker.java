@@ -229,11 +229,16 @@ public class KeyOrderedSinkWorker implements SinkWorker {
         log.info("[{}] entering RETRYING mode", this.name);
     }
 
+    private void refreshBlockedKeys() {
+        var keys = this.retryStore.listKeys(this.name);
+        this.blockedKeys.clear();
+        this.blockedKeys.addAll(keys);
+    }
+
     private void pollAndProcessRetrying() {
         var entries = this.retryStore.list(this.name, this.batchSize);
         if (entries.isEmpty()) {
-            this.blockedKeys.clear();
-            this.blockedKeys.addAll(this.retryStore.listKeys(this.name));
+            refreshBlockedKeys();
             this.emptyPollCount = 0;
             this.state = State.NORMAL;
             log.info("[{}] exiting RETRYING mode, {} blocked keys",
@@ -260,6 +265,7 @@ public class KeyOrderedSinkWorker implements SinkWorker {
 
         var subBatches = MessageUtils.batchByUniqueKey(records,
                 r -> r.getBusinessKey() != null ? r.getBusinessKey() : "");
+        int failedCount = 0;
         for (var subBatch : subBatches) {
             List<SinkResult> results = this.handler.handle(subBatch).join();
             for (var result : results) {
@@ -272,9 +278,18 @@ public class KeyOrderedSinkWorker implements SinkWorker {
                 } else {
                     this.retryStore.failed(entry.getId(), LocalDateTime.now());
                     log.warn("[{}] retry failed for {}", this.name, entry.getId());
-                    return;
+                    failedCount++;
                 }
             }
+            if (failedCount > 0) {
+                break;
+            }
+        }
+        if (failedCount > 0) {
+            refreshBlockedKeys();
+            this.state = State.NORMAL;
+            log.info("[{}] retry batch had {} failure(s), exiting RETRYING mode, {} blocked keys",
+                    this.name, failedCount, this.blockedKeys.size());
         }
         this.eventLoop.enqueue(POLL_SIGNAL);
     }
