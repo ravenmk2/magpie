@@ -3,6 +3,7 @@ package ravenworks.magpie.engine.source.sample;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import ravenworks.magpie.common.runtime.EventLoop;
+import ravenworks.magpie.common.util.PropertiesUtils;
 import ravenworks.magpie.common.util.Uuids;
 import ravenworks.magpie.engine.source.SourceConnector;
 import ravenworks.magpie.engine.stream.MessageRecord;
@@ -21,9 +22,6 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 public class SampleSourceConnector implements SourceConnector {
 
-    private static final int DEFAULT_IDLE_TIMEOUT_MS = 5_000;
-    private static final int DEFAULT_BATCH_SIZE = 10;
-
     private final String name;
     private final String topic;
     private final StreamProducer producer;
@@ -34,11 +32,12 @@ public class SampleSourceConnector implements SourceConnector {
                                  @NonNull String name,
                                  @NonNull Map<String, Object> properties) {
         this.name = name;
-        this.topic = getStringProperty(properties, "topic", name);
         this.producer = producer;
-        this.batchSize = getIntProperty(properties, "batchSize", DEFAULT_BATCH_SIZE);
-        int idleTimeout = getIntProperty(properties, "idleTimeout", DEFAULT_IDLE_TIMEOUT_MS);
-        this.eventLoop = new EventLoop("src-" + name, idleTimeout, this::dispatch);
+        var props = new SampleSourceProperties();
+        PropertiesUtils.bind(props, properties);
+        this.topic = props.getTopic() != null && !props.getTopic().isBlank() ? props.getTopic() : name;
+        this.batchSize = props.getBatchSize();
+        this.eventLoop = new EventLoop("src-" + name, props.getIdleTimeout(), this::dispatch);
     }
 
     @Override
@@ -79,22 +78,6 @@ public class SampleSourceConnector implements SourceConnector {
                     .setPayload(("Sample message at " + Instant.now()).getBytes(StandardCharsets.UTF_8));
             this.producer.send(msg);
         }
-    }
-
-    private static int getIntProperty(Map<String, Object> properties, String key, int defaultValue) {
-        Object value = properties.get(key);
-        if (value instanceof Number n) {
-            return n.intValue();
-        }
-        return defaultValue;
-    }
-
-    private static String getStringProperty(Map<String, Object> properties, String key, String defaultValue) {
-        Object value = properties.get(key);
-        if (value instanceof String s) {
-            return s;
-        }
-        return defaultValue;
     }
 
 }

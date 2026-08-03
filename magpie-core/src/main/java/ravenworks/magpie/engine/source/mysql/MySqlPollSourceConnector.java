@@ -27,7 +27,6 @@ public class MySqlPollSourceConnector implements SourceConnector {
     private static final String STRATEGY_ORDERED = "ordered";
     private static final String STRATEGY_KEY_ORDERED = "key_ordered";
 
-
     private final String name;
     private final StreamProducer producer;
     private final int batchSize;
