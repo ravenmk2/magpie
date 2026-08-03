@@ -18,11 +18,11 @@ import java.util.function.Consumer;
 @Slf4j
 public class EventLoop {
 
-    private static final Object SHUTDOWN_SIGNAL = new Object();
+    private static final Object NOOP = new Object();
 
     private final AtomicReference<EventLoopState> state = new AtomicReference<>(EventLoopState.NEW);
     private final BlockingQueue<Object> events = new LinkedBlockingQueue<>();
-    private final CompletableFuture<Void> termination = new CompletableFuture<>();
+    private final CompletableFuture<Void> termination;
 
     @Getter
     private final String name;
@@ -37,6 +37,7 @@ public class EventLoop {
         this.name = name;
         this.idleTimeout = Math.max(10, idleTimeout);
         this.handler = handler;
+        this.termination = new GuardedCompletableFuture<>(() -> this.thread, this.name);
     }
 
     public EventLoopState getState() {
@@ -65,35 +66,47 @@ public class EventLoop {
             throw new IllegalStateException("Event loop is not running");
         }
         log.info("{} - Event loop shutdown requested", this.name);
-        this.events.add(SHUTDOWN_SIGNAL);
+        this.events.add(NOOP);
         return this.termination;
     }
 
     public void enqueue(@NonNull Object event) {
-        this.events.add(event);
+        synchronized (this.events) {
+            var s = this.state.get();
+            if (s == EventLoopState.SHUTTING_DOWN || s == EventLoopState.TERMINATED) {
+                log.warn("{} - Event dropped, event loop is shutting down: {}",
+                        this.name, event.getClass().getSimpleName());
+                return;
+            }
+            this.events.add(event);
+        }
     }
 
     private void run() {
         log.info("{} - Event loop started", this.name);
-        this.dispatch(new Started());
+        this.dispatch(Started.INSTANCE);
         while (this.state.get() == EventLoopState.RUNNING) {
             Object msg = this.poll(this.idleTimeout);
-            if (msg == null) {
-                msg = new Idle();
-            }
             this.dispatch(msg);
         }
 
         log.info("{} - Event loop shutdown initiated", this.name);
-        this.dispatch(new PreShutdown());
-        while (!this.events.isEmpty()) {
-            Object msg = this.poll(1);
-            if (msg != null) {
-                this.dispatch(msg);
+        this.dispatch(PreShutdown.INSTANCE);
+        while (true) {
+            Object msg;
+            synchronized (this.events) {
+                msg = this.events.poll();
+                if (msg == null) {
+                    break;
+                }
             }
+            if (msg instanceof Idle) {
+                continue;
+            }
+            this.dispatch(msg);
         }
 
-        this.dispatch(new Terminated());
+        this.dispatch(Terminated.INSTANCE);
         this.state.set(EventLoopState.TERMINATED);
         log.info("{} - Event loop exited", this.name);
         this.termination.complete(null);
@@ -101,15 +114,18 @@ public class EventLoop {
 
     private Object poll(int timeout) {
         try {
-            return this.events.poll(timeout, TimeUnit.MILLISECONDS);
+            Object msg = this.events.poll(timeout, TimeUnit.MILLISECONDS);
+            if (msg == null) {
+                return Idle.INSTANCE;
+            }
         } catch (Throwable e) {
             log.error(e.getMessage(), e);
         }
         return null;
     }
 
-    private void dispatch(@NonNull Object msg) {
-        if (msg == SHUTDOWN_SIGNAL) {
+    private void dispatch(Object msg) {
+        if (msg == null || msg == NOOP) {
             return;
         }
         try {
@@ -122,20 +138,28 @@ public class EventLoop {
 
     public record Idle() {
 
+        private static final Idle INSTANCE = new Idle();
+
     }
 
 
     public record Started() {
+
+        private static final Started INSTANCE = new Started();
 
     }
 
 
     public record PreShutdown() {
 
+        private static final PreShutdown INSTANCE = new PreShutdown();
+
     }
 
 
     public record Terminated() {
+
+        private static final Terminated INSTANCE = new Terminated();
 
     }
 

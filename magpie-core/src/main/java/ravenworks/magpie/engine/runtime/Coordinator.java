@@ -17,6 +17,8 @@ import ravenworks.magpie.engine.stream.StreamRegistry;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 
 /**
@@ -27,6 +29,7 @@ public class Coordinator {
 
     private static final Object WAKEUP_SIGNAL = new Object();
     private static final int DEFAULT_IDLE_TIMEOUT_MS = 5_000;
+    private static final long CONNECTOR_SHUTDOWN_TIMEOUT_MS = 30_000;
 
     private final EventLoop eventLoop;
     private final LeaderLock leaderLock;
@@ -175,11 +178,9 @@ public class Coordinator {
         if (this.sourceConnectors.isEmpty()) {
             return;
         }
-        var futures = this.sourceConnectors.values()
-                .stream()
-                .map(SourceConnector::shutdown)
-                .toArray(CompletableFuture[]::new);
-        CompletableFuture.allOf(futures).join();
+        var futures = new LinkedHashMap<String, CompletableFuture<Void>>();
+        this.sourceConnectors.forEach((name, connector) -> futures.put(name, connector.shutdown()));
+        awaitAll("Source", futures);
         this.sourceConnectors.clear();
         log.info("Source connectors shutdown complete");
     }
@@ -202,13 +203,30 @@ public class Coordinator {
         if (this.sinkConnectors.isEmpty()) {
             return;
         }
-        var futures = this.sinkConnectors.values()
-                .stream()
-                .map(SinkConnector::shutdown)
-                .toArray(CompletableFuture[]::new);
-        CompletableFuture.allOf(futures).join();
+        var futures = new LinkedHashMap<String, CompletableFuture<Void>>();
+        this.sinkConnectors.forEach((name, connector) -> futures.put(name, connector.shutdown()));
+        awaitAll("Sink", futures);
         this.sinkConnectors.clear();
         log.info("Sink connectors shutdown complete");
+    }
+
+    private static void awaitAll(String kind, Map<String, CompletableFuture<Void>> futures) {
+        try {
+            CompletableFuture.allOf(futures.values().toArray(CompletableFuture[]::new))
+                    .get(CONNECTOR_SHUTDOWN_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            futures.forEach((name, future) -> {
+                if (!future.isDone()) {
+                    log.error("{} connector '{}' did not stop within {} ms",
+                            kind, name, CONNECTOR_SHUTDOWN_TIMEOUT_MS);
+                }
+            });
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("{} connectors shutdown interrupted", kind, e);
+        } catch (Exception e) {
+            log.error("{} connectors shutdown failed", kind, e);
+        }
     }
 
 }

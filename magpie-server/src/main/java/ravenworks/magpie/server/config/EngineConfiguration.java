@@ -1,6 +1,7 @@
 package ravenworks.magpie.server.config;
 
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,8 +24,10 @@ import ravenworks.magpie.engine.stream.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 
+@Slf4j
 @Configuration
 public class EngineConfiguration {
 
@@ -114,7 +117,14 @@ public class EngineConfiguration {
 
             @Override
             public void stop() {
-                coordinator.shutdown().join();
+                try {
+                    coordinator.shutdown().get(90, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.error("Coordinator shutdown interrupted", e);
+                } catch (Exception e) {
+                    log.error("Coordinator shutdown failed or timed out", e);
+                }
             }
 
             @Override
