@@ -1,10 +1,14 @@
 package ravenworks.magpie.engine.sink.http;
 
 import org.junit.jupiter.api.Test;
+import ravenworks.magpie.common.util.CircuitBreaker;
+import ravenworks.magpie.engine.sink.SinkStatus;
 import ravenworks.magpie.engine.stream.ConsumerRecord;
 
+import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -109,6 +113,76 @@ class HttpSinkHandlerTest {
         assertNull(event.getExtension("xtenantid"));
         assertNull(event.getExtension("xbusinesskey"));
         assertNull(event.getExtension("xheaders"));
+    }
+
+    private static HttpSinkHandler newHandler(String url, int maxAttempts) {
+        var config = HttpSinkHandlerConfig.of(Map.of("url", url));
+        config.setDelayMs(0);
+        config.setMaxAttempts(maxAttempts);
+        return new HttpSinkHandler("t", HttpClient.newHttpClient(),
+                new CircuitBreaker("t", 100, 1, 1_000), config);
+    }
+
+    @Test
+    void unserializableRecordFailsOnlyItselfWithoutCircuitBreaker() {
+        var handler = newHandler("http://127.0.0.1:1/x", 1);
+        try {
+            // id 缺失, CloudEvent 构建必失败: 不经 HTTP(attempts=0), 仅本条 FAILURE
+            var record = new ConsumerRecord()
+                    .setOffset(0)
+                    .setType("t.test")
+                    .setTopic("topic");
+            var result = handler.handle(record).join();
+            assertEquals(SinkStatus.FAILURE, result.getStatus());
+            assertEquals(0, result.getAttempts());
+            assertNotNull(result.getError());
+            assertEquals(record, result.getRecord());
+        } finally {
+            handler.shutdown().join();
+        }
+    }
+
+    @Test
+    void invalidUrlIsRetriedLikeSystemicFailure() {
+        var handler = newHandler("://invalid-url", 2);
+        try {
+            var record = new ConsumerRecord()
+                    .setOffset(1)
+                    .setId("id-x")
+                    .setType("t.test")
+                    .setTopic("topic");
+            // IllegalArgumentException 与 IO 错误同属系统性故障: 退避重试直到 maxAttempts
+            var result = handler.handle(record).join();
+            assertEquals(SinkStatus.FAILURE, result.getStatus());
+            assertEquals(2, result.getAttempts());
+        } finally {
+            handler.shutdown().join();
+        }
+    }
+
+    @Test
+    void batchIsolatesPoisonedAndFailingRecords() {
+        var handler = newHandler("http://127.0.0.1:1/x", 1);
+        try {
+            var poisoned = new ConsumerRecord()
+                    .setOffset(0)
+                    .setType("t.test")
+                    .setTopic("topic"); // id 缺失, 序列化失败
+            var unreachable = new ConsumerRecord()
+                    .setOffset(1)
+                    .setId("id-ok")
+                    .setType("t.test")
+                    .setTopic("topic"); // 端点连不通, 系统性失败
+            // join 不抛异常: 各条的失败被隔离为各自的 FAILURE, 不连坐整批
+            var results = handler.handle(List.of(poisoned, unreachable)).join();
+            assertEquals(2, results.size());
+            assertEquals(SinkStatus.FAILURE, results.get(0).getStatus());
+            assertEquals(0, results.get(0).getAttempts());
+            assertEquals(SinkStatus.FAILURE, results.get(1).getStatus());
+            assertEquals(1, results.get(1).getAttempts());
+        } finally {
+            handler.shutdown().join();
+        }
     }
 
 }

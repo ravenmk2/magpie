@@ -15,7 +15,6 @@ import ravenworks.magpie.engine.stream.MessageUtils;
 import ravenworks.magpie.engine.stream.StreamConsumer;
 
 import java.time.Duration;
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
@@ -135,25 +134,33 @@ public class KeyOrderedSinkWorker implements SinkWorker {
     }
 
     private void pollAndProcessNormal() {
-        var batch = this.consumer.poll(this.batchSize, Duration.ofMillis(50));
-        batch = SinkWorkerUtils.filterByOffset(this.name, batch, this.lastOffset.get());
-        if (!batch.isEmpty()) {
-            processBatch(batch);
-            long offset = this.lastOffset.get();
-            if (offset >= 0) {
-                this.consumer.commit(offset);
-            }
-            this.emptyPollCount = 0;
-        } else if (this.hasRetryable) {
-            this.emptyPollCount++;
-            if (this.emptyPollCount >= EMPTY_POLL_THRESHOLD) {
-                if (!this.retryStore.listRetryable(this.name, 1).isEmpty()) {
-                    enterRetrying();
+        try {
+            var batch = this.consumer.poll(this.batchSize, Duration.ofMillis(50));
+            batch = SinkWorkerUtils.filterByOffset(this.name, batch, this.lastOffset.get());
+            if (!batch.isEmpty()) {
+                processBatch(batch);
+                long offset = this.lastOffset.get();
+                if (offset >= 0) {
+                    this.consumer.commit(offset);
                 }
                 this.emptyPollCount = 0;
+            } else if (this.hasRetryable) {
+                this.emptyPollCount++;
+                if (this.emptyPollCount >= EMPTY_POLL_THRESHOLD) {
+                    if (!this.retryStore.listRetryable(this.name, 1).isEmpty()) {
+                        enterRetrying();
+                    }
+                    this.emptyPollCount = 0;
+                }
             }
+        } catch (Exception e) {
+            // 系统性故障（如 Stream/DB 瞬断）：停顿后下轮继续，避免忙转
+            log.warn("[{}] poll/process failed, retry in 1s", this.name, e);
+            LockSupport.parkNanos(1_000_000_000L);
+        } finally {
+            // 异常（如重试落库失败）不能中断轮询循环
+            this.eventLoop.enqueue(POLL_SIGNAL);
         }
-        this.eventLoop.enqueue(POLL_SIGNAL);
     }
 
     private void processBatch(List<ConsumerRecord> batch) {
@@ -161,8 +168,7 @@ public class KeyOrderedSinkWorker implements SinkWorker {
         if (remaining.isEmpty()) {
             return;
         }
-        var subBatches = MessageUtils.batchByUniqueKey(remaining,
-                r -> r.getBusinessKey() != null ? r.getBusinessKey() : "");
+        var subBatches = MessageUtils.batchByUniqueKey(remaining, KeyOrderedSinkWorker::keyOf);
         for (var subBatch : subBatches) {
             processSubBatch(subBatch);
         }
@@ -175,7 +181,7 @@ public class KeyOrderedSinkWorker implements SinkWorker {
         List<ConsumerRecord> remaining = new ArrayList<>();
         for (var record : batch) {
             if (isBlocked(record)) {
-                this.retryStore.save(this.name, record);
+                SinkWorkerUtils.saveWithRetry(this.retryStore, this.name, record, this.eventLoop);
                 this.hasRetryable = true;
                 this.lastOffset.updateAndGet(o -> Math.max(o, record.getOffset()));
             } else {
@@ -186,15 +192,22 @@ public class KeyOrderedSinkWorker implements SinkWorker {
     }
 
     private boolean isBlocked(ConsumerRecord record) {
-        String key = record.getBusinessKey();
-        return key != null && this.blockedKeys.contains(key);
+        return this.blockedKeys.contains(keyOf(record));
+    }
+
+    /**
+     * businessKey 归一化：null 视为 ""。与批量分组及仓储落库（NOT NULL 列）保持一致，
+     * 否则 null key 消息既不阻塞也不分流，key 内顺序无从保证。
+     */
+    private static String keyOf(ConsumerRecord record) {
+        return record.getBusinessKey() != null ? record.getBusinessKey() : "";
     }
 
     private void processSubBatch(List<ConsumerRecord> subBatch) {
         List<ConsumerRecord> toSend = new ArrayList<>();
         for (var record : subBatch) {
             if (isBlocked(record)) {
-                this.retryStore.save(this.name, record);
+                SinkWorkerUtils.saveWithRetry(this.retryStore, this.name, record, this.eventLoop);
                 this.hasRetryable = true;
                 this.lastOffset.updateAndGet(o -> Math.max(o, record.getOffset()));
             } else {
@@ -206,16 +219,13 @@ public class KeyOrderedSinkWorker implements SinkWorker {
         }
         List<SinkResult> results = this.handler.handle(toSend).join();
         for (var result : results) {
+            if (result.getStatus() != SinkStatus.SUCCESS) {
+                // 先持久化再推进水位：落库失败的消息不提交 offset，等待重投
+                SinkWorkerUtils.saveWithRetry(this.retryStore, this.name, result.getRecord(), this.eventLoop);
+                this.hasRetryable = true;
+                this.blockedKeys.add(keyOf(result.getRecord()));
+            }
             this.lastOffset.updateAndGet(o -> Math.max(o, result.getRecord().getOffset()));
-            if (result.getStatus() == SinkStatus.SUCCESS) {
-                continue;
-            }
-            this.retryStore.save(this.name, result.getRecord());
-            this.hasRetryable = true;
-            String key = result.getRecord().getBusinessKey();
-            if (key != null) {
-                this.blockedKeys.add(key);
-            }
         }
     }
 
@@ -231,62 +241,71 @@ public class KeyOrderedSinkWorker implements SinkWorker {
     }
 
     private void pollAndProcessRetrying() {
-        var entries = this.retryStore.list(this.name, this.batchSize);
-        if (entries.isEmpty()) {
-            refreshBlockedKeys();
-            this.emptyPollCount = 0;
-            this.state = State.NORMAL;
-            log.info("[{}] exiting RETRYING mode, {} blocked keys",
-                    this.name, this.blockedKeys.size());
-            this.eventLoop.enqueue(POLL_SIGNAL);
-            return;
-        }
+        try {
+            // 只取已到期的重试项（按 offset 升序保证 key 内顺序）；未到期项留在库中等待
+            var entries = this.retryStore.listRetryable(this.name, this.batchSize);
+            if (entries.isEmpty()) {
+                // 没有到期项不代表存储为空：退避中的消息仍在，hasRetryable 不能复位
+                this.hasRetryable = !this.retryStore.list(this.name, 1).isEmpty();
+                refreshBlockedKeys();
+                this.emptyPollCount = 0;
+                this.state = State.NORMAL;
+                log.info("[{}] exiting RETRYING mode, {} blocked keys",
+                        this.name, this.blockedKeys.size());
+                return;
+            }
 
-        Map<Long, RetryRecord> entryByOffset = new HashMap<>();
-        List<ConsumerRecord> records = new ArrayList<>();
-        for (var e : entries) {
-            entryByOffset.put(e.getOffset(), e);
-            records.add(new ConsumerRecord()
-                    .setOffset(e.getOffset())
-                    .setId(e.getMessageId())
-                    .setType(e.getType())
-                    .setEventTime(e.getEventTime())
-                    .setTopic(e.getTopic())
-                    .setTenantId(e.getTenantId())
-                    .setBusinessKey(e.getBusinessKey())
-                    .setHeaders(e.getHeaders())
-                    .setPayload(e.getPayload()));
-        }
+            Map<Long, RetryRecord> entryByOffset = new HashMap<>();
+            List<ConsumerRecord> records = new ArrayList<>();
+            for (var e : entries) {
+                entryByOffset.put(e.getOffset(), e);
+                records.add(new ConsumerRecord()
+                        .setOffset(e.getOffset())
+                        .setId(e.getMessageId())
+                        .setType(e.getType())
+                        .setEventTime(e.getEventTime())
+                        .setTopic(e.getTopic())
+                        .setTenantId(e.getTenantId())
+                        .setBusinessKey(e.getBusinessKey())
+                        .setHeaders(e.getHeaders())
+                        .setPayload(e.getPayload()));
+            }
 
-        var subBatches = MessageUtils.batchByUniqueKey(records,
-                r -> r.getBusinessKey() != null ? r.getBusinessKey() : "");
-        int failedCount = 0;
-        for (var subBatch : subBatches) {
-            List<SinkResult> results = this.handler.handle(subBatch).join();
-            for (var result : results) {
-                RetryRecord entry = entryByOffset.get(result.getRecord().getOffset());
-                if (entry == null) {
-                    continue;
+            var subBatches = MessageUtils.batchByUniqueKey(records, KeyOrderedSinkWorker::keyOf);
+            int failedCount = 0;
+            for (var subBatch : subBatches) {
+                List<SinkResult> results = this.handler.handle(subBatch).join();
+                for (var result : results) {
+                    RetryRecord entry = entryByOffset.get(result.getRecord().getOffset());
+                    if (entry == null) {
+                        continue;
+                    }
+                    if (result.getStatus() == SinkStatus.SUCCESS) {
+                        this.retryStore.succeeded(entry.getId());
+                    } else {
+                        this.retryStore.failed(entry.getId());
+                        log.warn("[{}] retry failed for {}", this.name, entry.getId());
+                        failedCount++;
+                    }
                 }
-                if (result.getStatus() == SinkStatus.SUCCESS) {
-                    this.retryStore.succeeded(entry.getId());
-                } else {
-                    this.retryStore.failed(entry.getId(), LocalDateTime.now());
-                    log.warn("[{}] retry failed for {}", this.name, entry.getId());
-                    failedCount++;
+                if (failedCount > 0) {
+                    break;
                 }
             }
             if (failedCount > 0) {
-                break;
+                refreshBlockedKeys();
+                this.state = State.NORMAL;
+                log.info("[{}] retry batch had {} failure(s), exiting RETRYING mode, {} blocked keys",
+                        this.name, failedCount, this.blockedKeys.size());
             }
+        } catch (Exception e) {
+            // 系统性故障（如 DB 瞬断）：停顿后下轮继续，避免忙转
+            log.warn("[{}] retry poll/process failed, retry in 1s", this.name, e);
+            LockSupport.parkNanos(1_000_000_000L);
+        } finally {
+            // 异常（如重试状态更新失败）不能中断轮询循环
+            this.eventLoop.enqueue(POLL_SIGNAL);
         }
-        if (failedCount > 0) {
-            refreshBlockedKeys();
-            this.state = State.NORMAL;
-            log.info("[{}] retry batch had {} failure(s), exiting RETRYING mode, {} blocked keys",
-                    this.name, failedCount, this.blockedKeys.size());
-        }
-        this.eventLoop.enqueue(POLL_SIGNAL);
     }
 
 }

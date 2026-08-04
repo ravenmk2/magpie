@@ -59,7 +59,12 @@ public class LeaderLockImpl implements LeaderLock {
             return PulseResult.FAILED;
         } catch (Exception e) {
             log.error("Leader lock pulse failed", e);
-            return acquired.get() ? PulseResult.LOST : PulseResult.FAILED;
+            // 与续期失败路径保持一致：报 LOST 必须同时复位 acquired，
+            // 否则 Coordinator 停止连接器后将永远无法通过 ACQUIRED 恢复
+            if (acquired.getAndSet(false)) {
+                return PulseResult.LOST;
+            }
+            return PulseResult.FAILED;
         }
     }
 

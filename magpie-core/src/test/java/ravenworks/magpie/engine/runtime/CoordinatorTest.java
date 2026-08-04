@@ -101,9 +101,13 @@ class CoordinatorTest {
     static class FakeStreamProvider implements StreamProvider {
 
         final List<String> created = new CopyOnWriteArrayList<>();
+        final AtomicInteger createFailures = new AtomicInteger();
 
         @Override
         public void create(StreamDefinition definition) {
+            if (this.createFailures.getAndUpdate(n -> n > 0 ? n - 1 : 0) > 0) {
+                throw new RuntimeException("stream creation failed (simulated)");
+            }
             this.created.add(definition.name());
         }
 
@@ -142,6 +146,8 @@ class CoordinatorTest {
         final FakeStreamProvider streamProvider = new FakeStreamProvider();
         final Map<String, FakeConnector> sources = new ConcurrentHashMap<>();
         final Map<String, FakeConnector> sinks = new ConcurrentHashMap<>();
+        final List<FakeConnector> allSources = new CopyOnWriteArrayList<>();
+        final List<FakeConnector> allSinks = new CopyOnWriteArrayList<>();
         final Coordinator coordinator;
 
         Harness() {
@@ -166,12 +172,14 @@ class CoordinatorTest {
                     (producer, definition) -> {
                         var connector = new FakeConnector(definition.getName(), definition.getType());
                         this.sources.put(definition.getName(), connector);
+                        this.allSources.add(connector);
                         return connector;
                     },
                     targetRegistry,
                     (provider, definition) -> {
                         var connector = new FakeConnector(definition.getName(), definition.getType());
                         this.sinks.put(definition.getName(), connector);
+                        this.allSinks.add(connector);
                         return connector;
                     },
                     new FakeStreamProducer(),
@@ -241,6 +249,48 @@ class CoordinatorTest {
     }
 
     @Test
+    void leaderReacquiredRestartsConnectors() {
+        var h = new Harness();
+        h.lock.thenReturn(LeaderLock.PulseResult.ACQUIRED, LeaderLock.PulseResult.LOST,
+                LeaderLock.PulseResult.ACQUIRED);
+        try {
+            h.coordinator.start();
+            await().atMost(2, TimeUnit.SECONDS).until(() ->
+                    h.allSources.size() == 2 && h.allSources.get(1).startCount.get() == 1
+                            && h.allSinks.size() == 2 && h.allSinks.get(1).startCount.get() == 1);
+
+            assertEquals(1, h.allSources.get(0).shutdownCount.get());
+            assertEquals(1, h.allSinks.get(0).shutdownCount.get());
+        } finally {
+            h.coordinator.shutdown();
+        }
+    }
+
+    @Test
+    void leaderRenewedRestartsConnectorsAfterStartupFailure() throws Exception {
+        var h = new Harness();
+        h.streamProvider.createFailures.set(1);
+        h.lock.thenReturn(LeaderLock.PulseResult.ACQUIRED, LeaderLock.PulseResult.RENEWED,
+                LeaderLock.PulseResult.RENEWED, LeaderLock.PulseResult.RENEWED);
+        try {
+            h.coordinator.start();
+            await().atMost(2, TimeUnit.SECONDS).until(() ->
+                    !h.allSources.isEmpty() && h.allSources.get(0).startCount.get() == 1
+                            && !h.allSinks.isEmpty() && h.allSinks.get(0).startCount.get() == 1);
+            await().atMost(2, TimeUnit.SECONDS).until(() -> h.lock.pulseCount.get() >= 4);
+            Thread.sleep(100);
+
+            // 首次 ACQUIRED 启动失败后由 RENEWED 补齐，且后续 RENEWED 不再重复启动
+            assertEquals(1, h.allSources.size());
+            assertEquals(1, h.allSinks.size());
+            assertEquals(1, h.allSources.get(0).startCount.get());
+            assertEquals(1, h.allSinks.get(0).startCount.get());
+        } finally {
+            h.coordinator.shutdown();
+        }
+    }
+
+    @Test
     void leaderLostStopsConnectors() {
         var h = new Harness();
         h.lock.thenReturn(LeaderLock.PulseResult.ACQUIRED, LeaderLock.PulseResult.LOST);
@@ -266,6 +316,18 @@ class CoordinatorTest {
         assertEquals(1, h.sources.get("src-on").shutdownCount.get());
         assertEquals(1, h.sinks.get("snk-on").shutdownCount.get());
         assertEquals(1, h.lock.releaseCount.get());
+    }
+
+    @Test
+    void isRunningReflectsEventLoopState() throws Exception {
+        var h = new Harness();
+        assertFalse(h.coordinator.isRunning(), "not running before start");
+
+        h.coordinator.start();
+        assertTrue(h.coordinator.isRunning(), "running after start");
+
+        h.coordinator.shutdown().get(2, TimeUnit.SECONDS);
+        assertFalse(h.coordinator.isRunning(), "not running after shutdown");
     }
 
     @Test

@@ -21,6 +21,8 @@ import java.util.concurrent.locks.LockSupport;
 public class OrderedSinkWorker implements SinkWorker {
 
     private static final Object POLL_SIGNAL = new Object();
+    /** 原地重试与熔断等待的停顿节奏 */
+    private static final long RETRY_PAUSE_NANOS = 200_000_000L;
 
     private final String name;
     private final StreamConsumer consumer;
@@ -123,21 +125,36 @@ public class OrderedSinkWorker implements SinkWorker {
         }
     }
 
+    /**
+     * ORDERED 语义：只有 SUCCESS 才前进；FAILURE 与 handler 异常原地重试（节奏与熔断等待一致，
+     * 连续失败由熔断器接管进一步限速），INTERRUPTED 或停机时中止本批次。
+     * 失败消息不跳过、不落库、不提交 offset，重启后从未提交处重新投递。
+     */
     private boolean processRecord(ConsumerRecord record) {
         while (this.eventLoop.getState() == EventLoopState.RUNNING) {
             if (this.circuitBreaker.isOpen()) {
-                LockSupport.parkNanos(200_000_000L);
+                LockSupport.parkNanos(RETRY_PAUSE_NANOS);
                 continue;
             }
-            SinkResult result = this.handler.handle(record).join();
+            SinkResult result;
+            try {
+                result = this.handler.handle(record).join();
+            } catch (Exception e) {
+                log.warn("[{}] handler error on offset={}, retry in place: {}",
+                        this.name, record.getOffset(), e.toString());
+                LockSupport.parkNanos(RETRY_PAUSE_NANOS);
+                continue;
+            }
             switch (result.getStatus()) {
                 case SUCCESS:
                     this.lastOffset.set(record.getOffset());
                     return true;
                 case BACKOFF:
                     break;
-                case INTERRUPTED:
                 case FAILURE:
+                    LockSupport.parkNanos(RETRY_PAUSE_NANOS);
+                    break;
+                case INTERRUPTED:
                     return false;
             }
         }

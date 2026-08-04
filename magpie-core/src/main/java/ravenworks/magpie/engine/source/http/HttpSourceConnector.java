@@ -27,6 +27,8 @@ public class HttpSourceConnector implements SourceConnector {
     private static final String EXT_TENANT_ID = "xtenantid";
     private static final String EXT_BUSINESS_KEY = "xbusinesskey";
     private static final int MAX_CACHE_SIZE = 10_000;
+    /** message_id 约定：32 字符 uuid7 hex */
+    private static final Pattern UUID_HEX_32 = Pattern.compile("[0-9a-fA-F]{32}");
 
     private final HttpSourceRouter router;
     private final StreamProducer producer;
@@ -107,7 +109,8 @@ public class HttpSourceConnector implements SourceConnector {
 
     private MessageRecord toMessageRecord(CloudEvent event, String topic) {
         String id = event.getId();
-        if (id == null || id.isBlank()) {
+        if (id == null || !UUID_HEX_32.matcher(id).matches()) {
+            // 不合规的客户端 id 一律替换为新生成的 uuid7，保证全链路 message_id 恒为 32 字符
             id = Uuids.uuid7Hex();
         }
 

@@ -3,6 +3,7 @@ package ravenworks.magpie.engine.runtime;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import ravenworks.magpie.common.runtime.EventLoop;
+import ravenworks.magpie.common.runtime.EventLoopState;
 import ravenworks.magpie.engine.lock.LeaderLock;
 import ravenworks.magpie.engine.sink.SinkConnector;
 import ravenworks.magpie.engine.sink.SinkFactory;
@@ -42,6 +43,8 @@ public class Coordinator {
     private final StreamProducer sourceProducer;
     private final Map<String, SourceConnector> sourceConnectors = new LinkedHashMap<>();
     private final Map<String, SinkConnector> sinkConnectors = new LinkedHashMap<>();
+    /** 连接器是否已启动；仅在事件循环线程读写 */
+    private boolean connectorsRunning;
 
     public Coordinator(@NonNull LeaderLock leaderLock,
                        @NonNull StreamRegistry streamRegistry,
@@ -81,6 +84,14 @@ public class Coordinator {
 
     public CompletableFuture<Void> shutdown() {
         return this.eventLoop.shutdown();
+    }
+
+    /**
+     * 协调器是否处于运行中（含正在停机）：供生命周期装配如实上报状态。
+     */
+    public boolean isRunning() {
+        var state = this.eventLoop.getState();
+        return state == EventLoopState.RUNNING || state == EventLoopState.SHUTTING_DOWN;
     }
 
     public void wake() {
@@ -134,22 +145,44 @@ public class Coordinator {
     }
 
     protected void onLeaderAcquired() {
-        this.initStreams();
-        this.startSourceConnectors();
-        this.startSinkConnectors();
+        this.startConnectors();
     }
 
     protected void onLeaderRenewed() {
+        if (!this.connectorsRunning) {
+            log.warn("Leader renewed but connectors are not running, restarting connectors");
+            this.startConnectors();
+        }
     }
 
     protected void onLeaderLost() {
+        this.connectorsRunning = false;
         this.shutdownSourceConnectors();
         this.shutdownSinkConnectors();
     }
 
     protected void onPreShutdown() {
+        this.connectorsRunning = false;
         this.shutdownSourceConnectors();
         this.shutdownSinkConnectors();
+    }
+
+    /**
+     * 启动 Stream 与全部连接器。任一步骤失败时回滚为未运行状态并清理已启动的连接器，
+     * 由后续 leader pulse（RENEWED）触发重试，避免 Leader 空转。
+     */
+    private void startConnectors() {
+        try {
+            this.initStreams();
+            this.startSourceConnectors();
+            this.startSinkConnectors();
+            this.connectorsRunning = true;
+        } catch (Exception e) {
+            this.connectorsRunning = false;
+            log.error("Failed to start connectors, will retry on next leader pulse", e);
+            this.shutdownSourceConnectors();
+            this.shutdownSinkConnectors();
+        }
     }
 
     private void initStreams() {

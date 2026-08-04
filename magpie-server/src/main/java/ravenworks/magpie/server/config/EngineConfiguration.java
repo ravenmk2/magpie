@@ -129,7 +129,9 @@ public class EngineConfiguration {
 
             @Override
             public boolean isRunning() {
-                return false;
+                // 状态直接派生自 Coordinator 的事件循环（SHUTTING_DOWN 视为运行中），
+                // 避免自持标志与真实状态脱节；Spring 仅在 true 时回调 stop()
+                return coordinator.isRunning();
             }
         };
     }

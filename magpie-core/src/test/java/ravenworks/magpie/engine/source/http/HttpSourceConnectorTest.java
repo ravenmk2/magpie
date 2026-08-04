@@ -21,11 +21,14 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HttpSourceConnectorTest {
+
+    private static final String VALID_ID = "0123456789abcdef0123456789abcdef";
 
     static class FakeStreamProducer implements StreamProducer {
 
@@ -60,7 +63,7 @@ class HttpSourceConnectorTest {
 
     private static CloudEvent fullEvent(String subject) {
         return CloudEventBuilder.v1()
-                .withId("e1")
+                .withId(VALID_ID)
                 .withSource(URI.create("test"))
                 .withType("t.order.created")
                 .withSubject(subject)
@@ -83,7 +86,7 @@ class HttpSourceConnectorTest {
 
         assertEquals(1, producer.sent.size());
         var record = producer.sent.get(0);
-        assertEquals("e1", record.getId());
+        assertEquals(VALID_ID, record.getId());
         assertEquals("t.order.created", record.getType());
         assertEquals("orders", record.getTopic());
         assertEquals("t1", record.getTenantId());
@@ -176,7 +179,23 @@ class HttpSourceConnectorTest {
     }
 
     @Test
-    void eventIdIsPassedThrough() {
+    void conformingUuid7IdIsPassedThrough() {
+        var router = new HttpSourceRouterImpl();
+        var producer = new FakeStreamProducer();
+        var connector = newConnector(router, producer, "orders");
+        connector.start();
+        var event = CloudEventBuilder.v1()
+                .withId(VALID_ID)
+                .withSource(URI.create("test"))
+                .withType("t.ping")
+                .withSubject("orders")
+                .build();
+        router.publish("src", event).join();
+        assertEquals(VALID_ID, producer.sent.get(0).getId());
+    }
+
+    @Test
+    void nonConformingIdIsReplacedWithUuid7() {
         var router = new HttpSourceRouterImpl();
         var producer = new FakeStreamProducer();
         var connector = newConnector(router, producer, "orders");
@@ -188,7 +207,10 @@ class HttpSourceConnectorTest {
                 .withSubject("orders")
                 .build();
         router.publish("src", event).join();
-        assertEquals("placeholder", producer.sent.get(0).getId());
+
+        var id = producer.sent.get(0).getId();
+        assertNotEquals("placeholder", id);
+        assertTrue(id.matches("[0-9a-f]{32}"), "id must be 32-char hex, got: " + id);
     }
 
     @Test

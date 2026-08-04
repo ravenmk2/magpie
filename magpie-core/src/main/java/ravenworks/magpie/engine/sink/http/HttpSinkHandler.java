@@ -98,7 +98,15 @@ public class HttpSinkHandler implements SinkHandler {
     public CompletableFuture<List<SinkResult>> handle(@NonNull List<ConsumerRecord> records) {
         @SuppressWarnings("unchecked")
         CompletableFuture<SinkResult>[] futures = records.stream()
-                .map(this::handle)
+                .map(record -> this.handle(record).exceptionally(e -> {
+                    // 兜底隔离: 任何单条消息的异常只影响本条, 不连坐整批
+                    log.error("[{}] msgId={} unexpected error, marking as failure",
+                            this.name, record.getId(), e);
+                    return new SinkResult()
+                            .setStatus(SinkStatus.FAILURE)
+                            .setError("unexpected: " + e)
+                            .setRecord(record);
+                }))
                 .toArray(CompletableFuture[]::new);
         return CompletableFuture.allOf(futures)
                 .thenApply(v -> {
@@ -125,6 +133,17 @@ public class HttpSinkHandler implements SinkHandler {
     }
 
     private SinkResult doSend(ConsumerRecord record) {
+        byte[] body;
+        try {
+            body = JSON_FORMAT.serialize(buildCloudEvent(record));
+        } catch (Exception e) {
+            // 消息自身非法（如 id 缺失），重试无意义且与端点无关：不计熔断，仅本条失败
+            log.error("[{}] msgId={} serialize failed, marking as failure", this.name, record.getId(), e);
+            return new SinkResult()
+                    .setStatus(SinkStatus.FAILURE)
+                    .setError("serialize failed: " + e.getMessage())
+                    .setRecord(record);
+        }
         int attempt = 0;
         while (!this.shutdown.get()) {
             if (this.circuitBreaker.isOpen()) {
@@ -141,7 +160,6 @@ public class HttpSinkHandler implements SinkHandler {
             }
             attempt++;
 
-            byte[] body = JSON_FORMAT.serialize(buildCloudEvent(record));
             try {
                 var request = HttpRequest.newBuilder()
                         .uri(URI.create(this.url))
@@ -178,11 +196,12 @@ public class HttpSinkHandler implements SinkHandler {
                         this.name, record.getId(), statusCode, attempt, backoffDelay);
                 backoff(backoffDelay);
 
-            } catch (IOException e) {
+            } catch (IOException | RuntimeException e) {
+                // RuntimeException（非法 URL、请求构建失败等）与 IO 错误同为系统性故障，同样退避重试
                 this.circuitBreaker.recordFailure();
                 long backoffDelay = computeBackoffDelay(this.backoff, this.delayMs, this.maxDelayMs, attempt);
-                log.warn("[{}] msgId={} IO error (attempt {}), retry in {}ms: {}",
-                        this.name, record.getId(), attempt, backoffDelay, e.getMessage());
+                log.warn("[{}] msgId={} send error (attempt {}), retry in {}ms: {}",
+                        this.name, record.getId(), attempt, backoffDelay, e.toString());
                 backoff(backoffDelay);
 
             } catch (InterruptedException e) {
