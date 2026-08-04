@@ -115,9 +115,7 @@ public class EventLoop {
     private Object poll(int timeout) {
         try {
             Object msg = this.events.poll(timeout, TimeUnit.MILLISECONDS);
-            if (msg == null) {
-                return Idle.INSTANCE;
-            }
+            return msg == null ? Idle.INSTANCE : msg;
         } catch (Throwable e) {
             log.error(e.getMessage(), e);
         }

@@ -235,11 +235,19 @@ public class HttpSinkHandler implements SinkHandler {
     }
 
     static long computeBackoffDelay(String backoff, long delay, long maxDelay, int attempt) {
-        if ("exponential".equalsIgnoreCase(backoff)) {
-            long computed = delay * (1L << (attempt - 1));
-            return Math.min(computed, maxDelay);
+        if (!"exponential".equalsIgnoreCase(backoff)) {
+            return delay;
         }
-        return delay;
+        if (attempt <= 1 || delay <= 0) {
+            return Math.min(delay, maxDelay);
+        }
+        // long 移位按 64 取模，且 delay * multiplier 可能溢出，统一提前封顶
+        int shift = Math.min(attempt - 1, 62);
+        long multiplier = 1L << shift;
+        if (delay > Long.MAX_VALUE / multiplier) {
+            return maxDelay;
+        }
+        return Math.min(delay * multiplier, maxDelay);
     }
 
 }
