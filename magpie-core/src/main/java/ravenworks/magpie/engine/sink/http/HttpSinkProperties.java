@@ -3,7 +3,7 @@ package ravenworks.magpie.engine.sink.http;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import ravenworks.magpie.common.util.PropertiesUtils;
-import ravenworks.magpie.engine.sink.OrderingGuarantee;
+import ravenworks.magpie.engine.sink.DeliveryMode;
 
 import java.util.HashSet;
 import java.util.Map;
@@ -49,8 +49,8 @@ public class HttpSinkProperties {
     @JsonProperty("circuitBreaker.resetMs")
     private long circuitBreakerResetMs = 600000;
 
-    @JsonProperty("orderingGuarantee")
-    private String orderingGuarantee = "ORDERED";
+    @JsonProperty("deliveryMode")
+    private String deliveryMode = "ORDERED";
 
     @JsonProperty("batchSize")
     private int batchSize = 100;
@@ -67,16 +67,16 @@ public class HttpSinkProperties {
         return config;
     }
 
-    public OrderingGuarantee resolveOrderingGuarantee() {
-        if (this.orderingGuarantee == null || this.orderingGuarantee.isBlank()) {
-            return OrderingGuarantee.ORDERED;
+    public DeliveryMode resolveDeliveryMode() {
+        if (this.deliveryMode == null || this.deliveryMode.isBlank()) {
+            return DeliveryMode.ORDERED;
         }
-        for (var v : OrderingGuarantee.values()) {
-            if (v.name().equalsIgnoreCase(this.orderingGuarantee)) {
+        for (var v : DeliveryMode.values()) {
+            if (v.name().equalsIgnoreCase(this.deliveryMode)) {
                 return v;
             }
         }
-        return OrderingGuarantee.ORDERED;
+        return DeliveryMode.ORDERED;
     }
 
     static Set<Integer> parseStatusCodes(String str) {

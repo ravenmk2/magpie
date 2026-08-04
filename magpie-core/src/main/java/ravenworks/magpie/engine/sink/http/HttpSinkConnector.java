@@ -76,8 +76,8 @@ public class HttpSinkConnector implements SinkConnector {
             this.workers.add(worker);
             worker.start();
         }
-        log.info("HTTP sink '{}' started, {} worker(s), url={}, ordering={}",
-                this.name, this.workers.size(), this.config.getUrl(), this.config.resolveOrderingGuarantee());
+        log.info("HTTP sink '{}' started, {} worker(s), url={}, deliveryMode={}",
+                this.name, this.workers.size(), this.config.getUrl(), this.config.resolveDeliveryMode());
     }
 
     @Override
@@ -90,7 +90,7 @@ public class HttpSinkConnector implements SinkConnector {
     }
 
     private SinkWorker createWorker(String name, StreamConsumer consumer) {
-        return switch (this.config.resolveOrderingGuarantee()) {
+        return switch (this.config.resolveDeliveryMode()) {
             case ORDERED -> createOrderedWorker(name, consumer);
             case KEY_ORDERED -> createKeyOrderedWorker(name, consumer);
             case BEST_EFFORT -> createBestEffortWorker(name, consumer);

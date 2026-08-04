@@ -1,6 +1,6 @@
 package ravenworks.magpie.engine.sink;
 
-public enum OrderingGuarantee {
+public enum DeliveryMode {
 
     ORDERED,
 
