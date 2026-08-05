@@ -1,30 +1,32 @@
 package ravenworks.magpie.server.config;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import ravenworks.magpie.domain.repository.*;
-import ravenworks.magpie.engine.lock.LeaderLock;
-import ravenworks.magpie.engine.lock.LeaderLockImpl;
-import ravenworks.magpie.engine.retry.RetryMessageStore;
-import ravenworks.magpie.engine.retry.RetryMessageStoreImpl;
-import ravenworks.magpie.engine.runtime.Coordinator;
-import ravenworks.magpie.engine.sink.*;
-import ravenworks.magpie.engine.sink.http.HttpSinkProvider;
-import ravenworks.magpie.engine.sink.print.PrintSinkProvider;
-import ravenworks.magpie.engine.source.*;
-import ravenworks.magpie.engine.source.http.HttpSourceProvider;
-import ravenworks.magpie.engine.source.http.HttpSourceRouter;
-import ravenworks.magpie.engine.source.http.HttpSourceRouterImpl;
-import ravenworks.magpie.engine.source.mysql.MySqlPollSourceProvider;
-import ravenworks.magpie.engine.source.sample.SampleSourceProvider;
-import ravenworks.magpie.engine.stream.*;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
+import ravenworks.magpie.engine.api.lock.LeaderLock;
+import ravenworks.magpie.engine.api.retry.RetryMessageStore;
+import ravenworks.magpie.engine.api.sink.*;
+import ravenworks.magpie.engine.api.source.*;
+import ravenworks.magpie.engine.api.source.http.HttpSourceRouter;
+import ravenworks.magpie.engine.api.stream.*;
+import ravenworks.magpie.engine.impl.lock.LeaderLockImpl;
+import ravenworks.magpie.engine.impl.retry.RetryMessageStoreImpl;
+import ravenworks.magpie.engine.impl.runtime.Coordinator;
+import ravenworks.magpie.engine.impl.sink.*;
+import ravenworks.magpie.engine.impl.sink.http.HttpSinkProvider;
+import ravenworks.magpie.engine.impl.sink.print.PrintSinkProvider;
+import ravenworks.magpie.engine.impl.source.*;
+import ravenworks.magpie.engine.impl.source.http.HttpSourceProvider;
+import ravenworks.magpie.engine.impl.source.http.HttpSourceRouterImpl;
+import ravenworks.magpie.engine.impl.source.mysql.MySqlPollSourceProvider;
+import ravenworks.magpie.engine.impl.source.sample.SampleSourceProvider;
+import ravenworks.magpie.engine.impl.stream.*;
 
 
 @Slf4j

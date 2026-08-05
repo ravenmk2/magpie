@@ -7,9 +7,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.*;
-import ravenworks.magpie.engine.source.http.HttpSourceRouter;
-import ravenworks.magpie.engine.source.http.NoSubscriberException;
-import ravenworks.magpie.engine.source.http.TopicNotAllowedException;
+import ravenworks.magpie.engine.api.source.http.HttpSourceRouter;
+import ravenworks.magpie.engine.api.source.http.NoSubscriberException;
+import ravenworks.magpie.engine.api.source.http.TopicNotAllowedException;
 import ravenworks.magpie.server.dto.ErrorResponse;
 
 import java.util.Map;

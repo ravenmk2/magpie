@@ -24,13 +24,14 @@ Magpie 是一个架在 RabbitMQ Stream 之上的消息总线，负责消息的�
 
 `magpie-core`（`ravenworks.magpie`）：
 
-- `engine.runtime` — 中枢调度（Coordinator），基于 Leader 锁选主后启停连接器
-- `engine.source` — Source 连接器 SPI 及实现（`http` / `mysql` / `sample`）
-- `engine.sink` — Sink 连接器 SPI 及实现（`http` / `print`），`sink.common` 为投递 worker
-- `engine.stream` — Stream 抽象（生产者/消费者/注册表/偏移跟踪）
-- `engine.rabbitmq` — Stream 抽象的 RabbitMQ Stream 实现
-- `engine.retry` — 投递失败消息的重试存储
-- `engine.lock` — 基于数据库的 Leader 锁
+引擎按 `engine.api` / `engine.impl` 双树组织：前者是抽象契约（接口/SPI/枚举/记录类型/异常），后者是全部实现。
+
+- `engine.api.stream` / `engine.impl.stream` — Stream 抽象（生产者/消费者/注册表/偏移跟踪）及其实现，`impl.rabbitmq` 为 RabbitMQ Stream 实现
+- `engine.api.source` / `engine.impl.source` — Source 连接器 SPI 及实现（`http` / `mysql` / `sample`），`api.source.http` 为发布契约
+- `engine.api.sink` / `engine.impl.sink` — Sink 连接器 SPI 及实现（`http` / `print`），`impl.sink.worker` 为投递 worker
+- `engine.impl.runtime` — 中枢调度（Coordinator），基于 Leader 锁选主后启停连接器
+- `engine.api.retry` / `engine.impl.retry` — 投递失败消息的重试存储
+- `engine.api.lock` / `engine.impl.lock` — 基于数据库的 Leader 锁
 - `domain` — JPA 实体与 Repository（`entity` / `repository` / `converter`）
 - `common` — 基础设施（`runtime` 事件循环、`util` 工具、`json`）
 
