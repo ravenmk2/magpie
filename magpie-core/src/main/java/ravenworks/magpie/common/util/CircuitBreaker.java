@@ -1,11 +1,13 @@
 package ravenworks.magpie.common.util;
 
-import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 
 /**
+ * 熔断器。批量投递模式下会被多个 handler 线程与 worker 线程并发访问，
+ * 所有读写（含状态迁移）都在 monitor 内完成；临界区仅内存操作，无 IO。
+ *
  * @author Raven
  */
 @Slf4j
@@ -19,7 +21,6 @@ public class CircuitBreaker {
     private final int halfOpenSuccessCount;
     private final long resetMillis;
 
-    @Getter
     private State state = State.CLOSED;
     private int consecutiveFailures;
     private int consecutiveSuccesses;
@@ -32,7 +33,11 @@ public class CircuitBreaker {
         this.resetMillis = resetMillis;
     }
 
-    public boolean isOpen() {
+    public synchronized State getState() {
+        return this.state;
+    }
+
+    public synchronized boolean isOpen() {
         if (this.state == State.OPEN) {
             if (System.currentTimeMillis() >= this.openUntilTimestamp) {
                 transitionToHalfOpen();
@@ -43,7 +48,7 @@ public class CircuitBreaker {
         return false;
     }
 
-    public void recordSuccess() {
+    public synchronized void recordSuccess() {
         this.consecutiveFailures = 0;
         this.consecutiveSuccesses++;
         if (this.state == State.HALF_OPEN && this.consecutiveSuccesses >= this.halfOpenSuccessCount) {
@@ -51,7 +56,7 @@ public class CircuitBreaker {
         }
     }
 
-    public void recordFailure() {
+    public synchronized void recordFailure() {
         this.consecutiveSuccesses = 0;
         this.consecutiveFailures++;
         if (this.state == State.HALF_OPEN) {
