@@ -3,11 +3,14 @@ package ravenworks.magpie.engine.sink.common;
 import org.junit.jupiter.api.Test;
 import ravenworks.magpie.common.util.CircuitBreaker;
 import ravenworks.magpie.engine.retry.RetryRecord;
+import ravenworks.magpie.engine.sink.SinkResult;
 import ravenworks.magpie.engine.sink.SinkStatus;
 import ravenworks.magpie.engine.stream.ConsumerRecord;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.awaitility.Awaitility.await;
@@ -226,6 +229,47 @@ class KeyOrderedSinkWorkerTest {
         } finally {
             worker.shutdown().get(2, TimeUnit.SECONDS);
         }
+    }
+
+    @Test
+    void shutdownCommitDoesNotSkipUnpersistedFailure() throws Exception {
+        var consumer = new FakeStreamConsumer();
+        var store = new InMemoryRetryMessageStore();
+        // 预置 key=b 的退避中记录: onStart 将 b 加入 blockedKeys，且不会立即被重试排空
+        store.save("k11", FakeStreamConsumer.record(0, "b"));
+        store.records().get(0).setRetryAt(LocalDateTime.now().plusHours(1));
+
+        // handler 在闸门打开前不返回结果，用于精确制造"停机与落库失败叠加"的窗口
+        var invoked = new CountDownLatch(1);
+        var gate = new CompletableFuture<Void>();
+        var handler = new FakeSinkHandler() {
+            @Override
+            public CompletableFuture<List<SinkResult>> handle(List<ConsumerRecord> records) {
+                invoked.countDown();
+                return gate.thenApply(v -> super.handle(records).join());
+            }
+        };
+        handler.thenReturn(SinkStatus.FAILURE); // offset 5 投递失败
+
+        var worker = new KeyOrderedSinkWorker("k11", consumer, handler, closedCircuit(), store, 100);
+        consumer.offer(List.of(FakeStreamConsumer.record(5, "a"), FakeStreamConsumer.record(6, "b")));
+        worker.start();
+
+        // 等 worker 走到 handler：此刻 offset 6（key b 被阻塞分流）已落库并把水位推进到 6，
+        // offset 5 的投递结果尚未返回
+        assertTrue(invoked.await(2, TimeUnit.SECONDS));
+
+        // 制造"停机 + 存储故障"叠加窗口后放行投递结果：offset 5 落库将被放弃
+        store.failSaves.set(true);
+        var shutdown = worker.shutdown();
+        gate.complete(null);
+        shutdown.get(5, TimeUnit.SECONDS);
+
+        // 停机提交必须停在缺口之前（4）：越过 5 提交就意味着 5 既未投递又未落库却被跳过
+        assertEquals(4, consumer.lastCommit());
+        // 库中只有预置记录与分流落库的 offset 6；offset 5 未落库，等重启重投
+        assertEquals(List.of(0L, 6L),
+                store.records().stream().map(RetryRecord::getOffset).sorted().toList());
     }
 
     @Test

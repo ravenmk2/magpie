@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -124,6 +125,27 @@ class HttpSourceConnectorTest {
         var ex = assertThrows(CompletionException.class, () -> router.publish("src", event).join());
         assertInstanceOf(TopicNotAllowedException.class, ex.getCause());
         assertTrue(producer.sent.isEmpty());
+    }
+
+    @Test
+    void missingBusinessKeyIsAccepted() {
+        // xbusinesskey 是可选扩展：缺省时应正常发布，businessKey 为 null
+        //（路由分区与消息头在生产端归一为空串，见 PartitionUtils/RabbitStreamProducer）
+        var router = new HttpSourceRouterImpl();
+        var producer = new FakeStreamProducer();
+        var connector = newConnector(router, producer, "orders");
+        connector.start();
+        var event = CloudEventBuilder.v1()
+                .withId(VALID_ID)
+                .withSource(URI.create("test"))
+                .withType("t.ping")
+                .withSubject("orders")
+                .build();
+
+        router.publish("src", event).join();
+
+        assertEquals(1, producer.sent.size());
+        assertNull(producer.sent.get(0).getBusinessKey());
     }
 
     @Test

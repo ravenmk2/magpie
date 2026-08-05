@@ -13,6 +13,12 @@ class PartitionUtilsTest {
     }
 
     @Test
+    void nullKeyRoutesToPartitionZero() {
+        // null 归一为空串：无 businessKey 的消息视为同一条队列，不抛 NPE
+        assertEquals(0, PartitionUtils.partition(null, 8));
+    }
+
+    @Test
     void sameKeyAlwaysRoutesToSamePartition() {
         for (int i = 0; i < 100; i++) {
             String key = "key-" + i;

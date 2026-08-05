@@ -44,6 +44,8 @@ public class KeyOrderedSinkWorker implements SinkWorker {
     private State state;
     private boolean hasRetryable;
     private int emptyPollCount;
+    /** 停机时落库失败的最小 offset：停机提交不得越过它（at-least-once 缺口防护） */
+    private long firstUnpersistedOffset = Long.MAX_VALUE;
 
     public KeyOrderedSinkWorker(@NonNull String name,
                                 @NonNull StreamConsumer consumer,
@@ -107,10 +109,15 @@ public class KeyOrderedSinkWorker implements SinkWorker {
     }
 
     private void onPreShutdown() {
-        long lastOffset = this.lastOffset.get();
-        if (lastOffset >= 0) {
-            log.info("[{}] committing offset {} before shutdown", this.name, lastOffset);
-            this.consumer.commit(lastOffset);
+        // 提交水位不得越过停机时未能落库的消息：只提交缺口之前，其余等重启重投
+        long committable = Math.min(this.lastOffset.get(), this.firstUnpersistedOffset - 1);
+        if (this.firstUnpersistedOffset <= this.lastOffset.get()) {
+            log.warn("[{}] clamping shutdown commit to {}: message at offset {} was not persisted",
+                    this.name, committable, this.firstUnpersistedOffset);
+        }
+        if (committable >= 0) {
+            log.info("[{}] committing offset {} before shutdown", this.name, committable);
+            this.consumer.commit(committable);
         }
         try {
             this.consumer.stop();
@@ -181,7 +188,7 @@ public class KeyOrderedSinkWorker implements SinkWorker {
         List<ConsumerRecord> remaining = new ArrayList<>();
         for (var record : batch) {
             if (isBlocked(record)) {
-                SinkWorkerUtils.saveWithRetry(this.retryStore, this.name, record, this.eventLoop);
+                this.saveWithGapTracking(record);
                 this.hasRetryable = true;
                 this.lastOffset.updateAndGet(o -> Math.max(o, record.getOffset()));
             } else {
@@ -203,11 +210,25 @@ public class KeyOrderedSinkWorker implements SinkWorker {
         return record.getBusinessKey() != null ? record.getBusinessKey() : "";
     }
 
+    /**
+     * 落库包装：停机中落库失败时（saveWithRetry 按设计放弃重试并抛出），先记录未能持久化的
+     * 最小 offset 再抛出——onPreShutdown 的提交不得越过它，否则该消息既未投递又未落库，
+     * 却随水位提交被跳过，永久丢失。正常运行期 saveWithRetry 原地重试不抛出，不影响正常语义。
+     */
+    private void saveWithGapTracking(ConsumerRecord record) {
+        try {
+            SinkWorkerUtils.saveWithRetry(this.retryStore, this.name, record, this.eventLoop);
+        } catch (RuntimeException e) {
+            this.firstUnpersistedOffset = Math.min(this.firstUnpersistedOffset, record.getOffset());
+            throw e;
+        }
+    }
+
     private void processSubBatch(List<ConsumerRecord> subBatch) {
         List<ConsumerRecord> toSend = new ArrayList<>();
         for (var record : subBatch) {
             if (isBlocked(record)) {
-                SinkWorkerUtils.saveWithRetry(this.retryStore, this.name, record, this.eventLoop);
+                this.saveWithGapTracking(record);
                 this.hasRetryable = true;
                 this.lastOffset.updateAndGet(o -> Math.max(o, record.getOffset()));
             } else {
@@ -221,7 +242,7 @@ public class KeyOrderedSinkWorker implements SinkWorker {
         for (var result : results) {
             if (result.getStatus() != SinkStatus.SUCCESS) {
                 // 先持久化再推进水位：落库失败的消息不提交 offset，等待重投
-                SinkWorkerUtils.saveWithRetry(this.retryStore, this.name, result.getRecord(), this.eventLoop);
+                this.saveWithGapTracking(result.getRecord());
                 this.hasRetryable = true;
                 this.blockedKeys.add(keyOf(result.getRecord()));
             }

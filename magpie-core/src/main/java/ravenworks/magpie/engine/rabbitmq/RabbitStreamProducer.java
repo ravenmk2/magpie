@@ -63,7 +63,9 @@ public class RabbitStreamProducer implements StreamProducer {
                 .messageId(record.getId())
                 .messageBuilder()
                 .applicationProperties()
-                .entry(ReservedHeaders.MSG_BUSINESS_KEY, record.getBusinessKey())
+                // null 归一为空串：与路由分区（partition()）及消费端 keyOf 的归一保持一致
+                .entry(ReservedHeaders.MSG_BUSINESS_KEY,
+                        record.getBusinessKey() != null ? record.getBusinessKey() : "")
                 .entry(ReservedHeaders.MSG_TENANT_ID, record.getTenantId())
                 .entry(ReservedHeaders.MSG_TYPE, record.getType())
                 .entry(ReservedHeaders.MSG_EVENT_TIME, TimeUtils.formatRfc3339(record.getEventTime()));

@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -21,6 +22,8 @@ class InMemoryRetryMessageStore implements RetryMessageStore {
     private final AtomicInteger idSeq = new AtomicInteger();
     /** >0 时 save 抛异常并递减，模拟存储瞬断 */
     final AtomicInteger saveFailures = new AtomicInteger();
+    /** true 时 save 一律抛异常，模拟存储持续故障 */
+    final AtomicBoolean failSaves = new AtomicBoolean();
 
     @Override
     public Set<String> listKeys(String consumer) {
@@ -45,6 +48,9 @@ class InMemoryRetryMessageStore implements RetryMessageStore {
 
     @Override
     public void save(String consumer, ConsumerRecord record) {
+        if (this.failSaves.get()) {
+            throw new RuntimeException("simulated store outage");
+        }
         if (this.saveFailures.getAndUpdate(n -> n > 0 ? n - 1 : n) > 0) {
             throw new RuntimeException("simulated store outage");
         }
