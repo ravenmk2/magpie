@@ -12,10 +12,6 @@ import java.nio.charset.StandardCharsets;
 @UtilityClass
 public class PartitionUtils {
 
-    /**
-     * null 归一为空串：无 businessKey 的消息视为同一条队列（与消费端 keyOf 归一一致），
-     * 全部路由到分区 0，在分区内保持相互有序。
-     */
     public static int partition(String key, int partitions) {
         if (key == null || key.isEmpty()) {
             return 0;
