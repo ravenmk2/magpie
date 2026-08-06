@@ -31,7 +31,7 @@ class JsonUtilsTest {
 
     @Test
     void decodeInvalidJsonThrows() {
-        assertThrows(JsonUtils.JsonException.class, () -> JsonUtils.decode("{bad json", Point.class));
+        assertThrows(JsonException.class, () -> JsonUtils.decode("{bad json", Point.class));
     }
 
     public static class Exploding {
@@ -44,7 +44,7 @@ class JsonUtilsTest {
 
     @Test
     void encodeFailureThrows() {
-        assertThrows(JsonUtils.JsonException.class, () -> JsonUtils.encode(new Exploding()));
+        assertThrows(JsonException.class, () -> JsonUtils.encode(new Exploding()));
     }
 
 }

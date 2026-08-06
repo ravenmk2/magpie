@@ -48,12 +48,4 @@ public class JsonUtils {
         }
     }
 
-    public static class JsonException extends RuntimeException {
-
-        public JsonException(String message, Throwable cause) {
-            super(message, cause);
-        }
-
-    }
-
 }
