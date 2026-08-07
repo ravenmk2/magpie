@@ -1,6 +1,5 @@
 package ravenworks.magpie.engine.impl.source;
 
-import java.util.List;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -9,6 +8,8 @@ import ravenworks.magpie.engine.api.source.SourceDefinition;
 import ravenworks.magpie.engine.api.source.SourceFactory;
 import ravenworks.magpie.engine.api.source.SourceProvider;
 import ravenworks.magpie.engine.api.stream.StreamProducer;
+
+import java.util.List;
 
 
 /**

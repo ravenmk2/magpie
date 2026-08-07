@@ -1,11 +1,12 @@
 package ravenworks.magpie.engine.impl.stream;
 
-import java.util.List;
 import lombok.NonNull;
 import ravenworks.magpie.domain.entity.TopicEntity;
 import ravenworks.magpie.domain.repository.TopicRepository;
 import ravenworks.magpie.engine.api.stream.StreamDefinition;
 import ravenworks.magpie.engine.api.stream.StreamRegistry;
+
+import java.util.List;
 
 
 /**

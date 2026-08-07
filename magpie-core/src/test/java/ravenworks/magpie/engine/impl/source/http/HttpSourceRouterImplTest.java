@@ -2,16 +2,16 @@ package ravenworks.magpie.engine.impl.source.http;
 
 import io.cloudevents.CloudEvent;
 import io.cloudevents.core.builder.CloudEventBuilder;
-import java.net.URI;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import ravenworks.magpie.engine.api.source.http.HttpMessageContext;
 import ravenworks.magpie.engine.api.source.http.NoSubscriberException;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import java.net.URI;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static org.junit.jupiter.api.Assertions.*;
+
 
 class HttpSourceRouterImplTest {
 

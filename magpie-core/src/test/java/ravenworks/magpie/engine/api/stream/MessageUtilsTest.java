@@ -7,6 +7,7 @@ import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+
 class MessageUtilsTest {
 
     private static List<List<String>> batch(String... keys) {

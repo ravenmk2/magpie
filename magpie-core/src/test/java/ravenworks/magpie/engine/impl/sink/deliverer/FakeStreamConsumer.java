@@ -11,6 +11,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+
 /**
  * 按脚本返回 poll 批次、记录 commit/stop 的测试用 StreamConsumer。
  */

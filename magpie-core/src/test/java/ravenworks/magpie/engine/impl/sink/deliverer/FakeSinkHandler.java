@@ -11,6 +11,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+
 /**
  * 按脚本返回结果（默认 SUCCESS）、记录所有经手消息的测试用 SinkHandler。
  */

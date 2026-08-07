@@ -32,8 +32,8 @@ public class WorkLoop {
     private volatile Thread thread;
 
     public WorkLoop(@NonNull String name,
-                     int idleTimeout,
-                     @NonNull Consumer<Object> handler) {
+                    int idleTimeout,
+                    @NonNull Consumer<Object> handler) {
         this.name = name;
         this.idleTimeout = Math.max(10, idleTimeout);
         this.handler = handler;

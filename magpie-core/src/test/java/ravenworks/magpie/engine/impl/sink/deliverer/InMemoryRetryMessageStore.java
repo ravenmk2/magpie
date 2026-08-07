@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
+
 /**
  * 内存版 RetryMessageStore：忽略 consumer 维度；retryAt 为 null 或不晚于当前时间视为到期。
  */
@@ -20,9 +21,13 @@ class InMemoryRetryMessageStore implements RetryMessageStore {
 
     private final List<RetryRecord> records = new CopyOnWriteArrayList<>();
     private final AtomicInteger idSeq = new AtomicInteger();
-    /** >0 时 save 抛异常并递减，模拟存储瞬断 */
+    /**
+     * >0 时 save 抛异常并递减，模拟存储瞬断
+     */
     final AtomicInteger saveFailures = new AtomicInteger();
-    /** true 时 save 一律抛异常，模拟存储持续故障 */
+    /**
+     * true 时 save 一律抛异常，模拟存储持续故障
+     */
     final AtomicBoolean failSaves = new AtomicBoolean();
 
     @Override

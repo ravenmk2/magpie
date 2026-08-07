@@ -1,5 +1,6 @@
 package ravenworks.magpie.common.json;
 
+
 /**
  * @author Raven
  */

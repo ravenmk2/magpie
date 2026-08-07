@@ -1,9 +1,5 @@
 package ravenworks.magpie.engine.impl.lock;
 
-import java.time.Duration;
-import java.time.LocalDateTime;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.LockSupport;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
@@ -11,6 +7,11 @@ import ravenworks.magpie.common.runtime.InstanceId;
 import ravenworks.magpie.domain.entity.LeaderLockEntity;
 import ravenworks.magpie.domain.repository.LeaderLockRepository;
 import ravenworks.magpie.engine.api.lock.LeaderLock;
+
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.LockSupport;
 
 
 /**
@@ -24,9 +25,13 @@ public class LeaderLockImpl implements LeaderLock {
 
     private final LeaderLockRepository lockRepository;
     private final long heartbeatIntervalMs;
-    /** 锁是否由本实例持有；由心跳线程写、调用方线程读 */
+    /**
+     * 锁是否由本实例持有；由心跳线程写、调用方线程读
+     */
     private final AtomicBoolean acquired = new AtomicBoolean(false);
-    /** pulse() 上次上报的持有状态，用于推导 ACQUIRED/LOST 跳变 */
+    /**
+     * pulse() 上次上报的持有状态，用于推导 ACQUIRED/LOST 跳变
+     */
     private final AtomicBoolean reported = new AtomicBoolean(false);
     private final AtomicBoolean running = new AtomicBoolean(false);
 

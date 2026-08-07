@@ -1,11 +1,12 @@
 package ravenworks.magpie.engine.impl.source.http;
 
-import java.util.Map;
 import lombok.NonNull;
 import ravenworks.magpie.engine.api.source.SourceConnector;
 import ravenworks.magpie.engine.api.source.SourceProvider;
 import ravenworks.magpie.engine.api.source.http.HttpSourceRouter;
 import ravenworks.magpie.engine.api.stream.StreamProducer;
+
+import java.util.Map;
 
 
 /**

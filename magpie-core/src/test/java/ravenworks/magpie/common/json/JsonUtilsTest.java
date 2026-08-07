@@ -8,6 +8,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+
 class JsonUtilsTest {
 
     record Point(int x, int y) {
@@ -25,6 +26,7 @@ class JsonUtilsTest {
     @Test
     void decodeWithTypeReference() {
         Map<String, Integer> map = JsonUtils.decode("{\"a\":1,\"b\":2}", new TypeReference<>() {
+
         });
         assertEquals(Map.of("a", 1, "b", 2), map);
     }

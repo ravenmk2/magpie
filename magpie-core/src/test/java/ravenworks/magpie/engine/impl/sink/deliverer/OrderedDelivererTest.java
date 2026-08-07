@@ -16,6 +16,7 @@ import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+
 class OrderedDelivererTest {
 
     private static CircuitBreaker closedCircuit() {
@@ -26,7 +27,8 @@ class OrderedDelivererTest {
     void successfulBatchAdvancesOffsetAndCommits() throws Exception {
         var consumer = new FakeStreamConsumer();
         var handler = new FakeSinkHandler();
-        var worker = new SinkWorker("w1", consumer, handler, closedCircuit(), null, 100, new OrderedDeliverer());
+        var worker = new SinkWorker("w1", consumer, 100,
+                new OrderedDeliverer("w1", handler, closedCircuit()));
         try {
             consumer.offer(List.of(FakeStreamConsumer.record(0, "a"), FakeStreamConsumer.record(1, "b")));
             worker.start();
@@ -45,7 +47,8 @@ class OrderedDelivererTest {
         var consumer = new FakeStreamConsumer();
         var handler = new FakeSinkHandler();
         handler.thenReturn(SinkStatus.BACKOFF);
-        var worker = new SinkWorker("w2", consumer, handler, closedCircuit(), null, 100, new OrderedDeliverer());
+        var worker = new SinkWorker("w2", consumer, 100,
+                new OrderedDeliverer("w2", handler, closedCircuit()));
         try {
             consumer.offer(List.of(FakeStreamConsumer.record(0, "a")));
             worker.start();
@@ -62,7 +65,8 @@ class OrderedDelivererTest {
         var consumer = new FakeStreamConsumer();
         var handler = new FakeSinkHandler();
         handler.thenReturn(SinkStatus.FAILURE);
-        var worker = new SinkWorker("w3", consumer, handler, closedCircuit(), null, 100, new OrderedDeliverer());
+        var worker = new SinkWorker("w3", consumer, 100,
+                new OrderedDeliverer("w3", handler, closedCircuit()));
         try {
             consumer.offer(List.of(FakeStreamConsumer.record(0, "a"), FakeStreamConsumer.record(1, "b")));
             worker.start();
@@ -85,7 +89,8 @@ class OrderedDelivererTest {
         var handler = new FakeSinkHandler();
         var circuitBreaker = new CircuitBreaker("t", 1, 1, 10_000);
         circuitBreaker.recordFailure();
-        var worker = new SinkWorker("w4", consumer, handler, circuitBreaker, null, 100, new OrderedDeliverer());
+        var worker = new SinkWorker("w4", consumer, 100,
+                new OrderedDeliverer("w4", handler, circuitBreaker));
         try {
             consumer.offer(List.of(FakeStreamConsumer.record(0, "a")));
             worker.start();
@@ -103,6 +108,7 @@ class OrderedDelivererTest {
         var consumer = new FakeStreamConsumer();
         var thrown = new AtomicBoolean(false);
         var handler = new FakeSinkHandler() {
+
             @Override
             public CompletableFuture<SinkResult> handle(ConsumerRecord record) {
                 if (record.getOffset() == 0 && thrown.compareAndSet(false, true)) {
@@ -111,7 +117,8 @@ class OrderedDelivererTest {
                 return super.handle(record);
             }
         };
-        var worker = new SinkWorker("w5", consumer, handler, closedCircuit(), null, 100, new OrderedDeliverer());
+        var worker = new SinkWorker("w5", consumer, 100,
+                new OrderedDeliverer("w5", handler, closedCircuit()));
         try {
             consumer.offer(List.of(FakeStreamConsumer.record(0, "a"), FakeStreamConsumer.record(1, "b")));
             worker.start();
@@ -130,7 +137,8 @@ class OrderedDelivererTest {
     void redeliveredOffsetsUpToLastCommitAreSkipped() throws Exception {
         var consumer = new FakeStreamConsumer();
         var handler = new FakeSinkHandler();
-        var worker = new SinkWorker("w6", consumer, handler, closedCircuit(), null, 100, new OrderedDeliverer());
+        var worker = new SinkWorker("w6", consumer, 100,
+                new OrderedDeliverer("w6", handler, closedCircuit()));
         try {
             consumer.offer(List.of(FakeStreamConsumer.record(0, "a"), FakeStreamConsumer.record(1, "b")));
             worker.start();

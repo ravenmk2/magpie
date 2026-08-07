@@ -2,6 +2,15 @@ package ravenworks.magpie.engine.impl.source.http;
 
 import io.cloudevents.CloudEvent;
 import io.cloudevents.core.builder.CloudEventBuilder;
+import org.junit.jupiter.api.Test;
+import ravenworks.magpie.engine.api.source.http.HttpSourceRouter;
+import ravenworks.magpie.engine.api.source.http.NoSubscriberException;
+import ravenworks.magpie.engine.api.source.http.PublishFailedException;
+import ravenworks.magpie.engine.api.source.http.TopicNotAllowedException;
+import ravenworks.magpie.engine.api.stream.MessageRecord;
+import ravenworks.magpie.engine.api.stream.SendResult;
+import ravenworks.magpie.engine.api.stream.StreamProducer;
+
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
@@ -12,26 +21,14 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
-import org.junit.jupiter.api.Test;
-import ravenworks.magpie.engine.api.source.http.HttpSourceRouter;
-import ravenworks.magpie.engine.api.source.http.NoSubscriberException;
-import ravenworks.magpie.engine.api.source.http.PublishFailedException;
-import ravenworks.magpie.engine.api.source.http.TopicNotAllowedException;
-import ravenworks.magpie.engine.api.stream.MessageRecord;
-import ravenworks.magpie.engine.api.stream.SendResult;
-import ravenworks.magpie.engine.api.stream.StreamProducer;
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import static org.junit.jupiter.api.Assertions.*;
+
 
 class HttpSourceConnectorTest {
 
     private static final String VALID_ID = "0123456789abcdef0123456789abcdef";
+
 
     static class FakeStreamProducer implements StreamProducer {
 

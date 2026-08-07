@@ -8,6 +8,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+
 class RoundRobinAddressResolverTest {
 
     private static final Address IGNORED = new Address("ignored", 0);

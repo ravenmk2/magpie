@@ -1,16 +1,16 @@
 package ravenworks.magpie.engine.impl.sink.print;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicLong;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import ravenworks.magpie.common.runtime.WorkLoop;
 import ravenworks.magpie.engine.api.sink.SinkConnector;
 import ravenworks.magpie.engine.api.stream.*;
-import ravenworks.magpie.engine.impl.stream.*;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 /**

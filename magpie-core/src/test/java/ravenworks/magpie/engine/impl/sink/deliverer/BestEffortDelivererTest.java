@@ -12,6 +12,7 @@ import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+
 class BestEffortDelivererTest {
 
     private static CircuitBreaker closedCircuit() {
@@ -23,7 +24,8 @@ class BestEffortDelivererTest {
         var consumer = new FakeStreamConsumer();
         var handler = new FakeSinkHandler();
         var store = new InMemoryRetryMessageStore();
-        var worker = new SinkWorker("b1", consumer, handler, closedCircuit(), store, 100, new BestEffortDeliverer());
+        var worker = new SinkWorker("b1", consumer, 100,
+                new BestEffortDeliverer("b1", handler, 100, closedCircuit(), store));
         try {
             consumer.offer(List.of(FakeStreamConsumer.record(0, "a"), FakeStreamConsumer.record(1, "b")));
             worker.start();
@@ -41,7 +43,8 @@ class BestEffortDelivererTest {
         var handler = new FakeSinkHandler();
         handler.thenReturn(SinkStatus.SUCCESS, SinkStatus.FAILURE);
         var store = new InMemoryRetryMessageStore();
-        var worker = new SinkWorker("b2", consumer, handler, closedCircuit(), store, 100, new BestEffortDeliverer());
+        var worker = new SinkWorker("b2", consumer, 100,
+                new BestEffortDeliverer("b2", handler, 100, closedCircuit(), store));
         try {
             consumer.offer(List.of(FakeStreamConsumer.record(0, "a"), FakeStreamConsumer.record(1, "b")));
             worker.start();
@@ -61,7 +64,8 @@ class BestEffortDelivererTest {
         var handler = new FakeSinkHandler();
         handler.thenReturn(SinkStatus.FAILURE, SinkStatus.FAILURE);
         var store = new InMemoryRetryMessageStore();
-        var worker = new SinkWorker("b3", consumer, handler, closedCircuit(), store, 100, new BestEffortDeliverer());
+        var worker = new SinkWorker("b3", consumer, 100,
+                new BestEffortDeliverer("b3", handler, 100, closedCircuit(), store));
         try {
             consumer.offer(List.of(FakeStreamConsumer.record(0, "a")));
             worker.start();
@@ -81,7 +85,8 @@ class BestEffortDelivererTest {
         handler.thenReturn(SinkStatus.FAILURE);
         var store = new InMemoryRetryMessageStore();
         store.saveFailures.set(1); // 第一次落库抛异常, saveWithRetry 每秒重试
-        var worker = new SinkWorker("b4", consumer, handler, closedCircuit(), store, 100, new BestEffortDeliverer());
+        var worker = new SinkWorker("b4", consumer, 100,
+                new BestEffortDeliverer("b4", handler, 100, closedCircuit(), store));
         try {
             consumer.offer(List.of(FakeStreamConsumer.record(0, "a")));
             worker.start();

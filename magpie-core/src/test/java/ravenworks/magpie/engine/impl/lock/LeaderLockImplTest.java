@@ -1,23 +1,29 @@
 package ravenworks.magpie.engine.impl.lock;
 
-import java.lang.reflect.Proxy;
-import java.time.LocalDateTime;
-import java.util.Optional;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.LockSupport;
 import org.junit.jupiter.api.Test;
 import ravenworks.magpie.common.runtime.InstanceId;
 import ravenworks.magpie.domain.entity.LeaderLockEntity;
 import ravenworks.magpie.domain.repository.LeaderLockRepository;
 import ravenworks.magpie.engine.api.lock.LeaderLock;
+
+import java.lang.reflect.Proxy;
+import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.LockSupport;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+
 class LeaderLockImplTest {
 
-    /** 测试用心跳间隔：状态迁移应在几十毫秒内发生 */
+    /**
+     * 测试用心跳间隔：状态迁移应在几十毫秒内发生
+     */
     private static final long HEARTBEAT_MS = 20;
     private static final long AWAIT_TIMEOUT_MS = 5_000;
+
 
     /**
      * 手写的 LeaderLockRepository 桩（动态代理）：仅实现本测试用到的方法。
@@ -80,7 +86,9 @@ class LeaderLockImplTest {
 
     }
 
-    /** pulse() 只上报跳变，反复调用直至等到期望状态（稳态下重复调用无副作用） */
+    /**
+     * pulse() 只上报跳变，反复调用直至等到期望状态（稳态下重复调用无副作用）
+     */
     private static LeaderLock.PulseResult awaitPulse(LeaderLock lock, LeaderLock.PulseResult expected) {
         long deadline = System.currentTimeMillis() + AWAIT_TIMEOUT_MS;
         LeaderLock.PulseResult r = lock.pulse();

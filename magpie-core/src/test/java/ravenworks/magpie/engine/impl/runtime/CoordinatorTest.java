@@ -8,28 +8,17 @@ import ravenworks.magpie.engine.api.sink.TargetRegistry;
 import ravenworks.magpie.engine.api.source.SourceConnector;
 import ravenworks.magpie.engine.api.source.SourceDefinition;
 import ravenworks.magpie.engine.api.source.SourceRegistry;
-import ravenworks.magpie.engine.api.stream.MessageRecord;
-import ravenworks.magpie.engine.api.stream.SendResult;
-import ravenworks.magpie.engine.api.stream.StreamConsumer;
-import ravenworks.magpie.engine.api.stream.StreamDefinition;
-import ravenworks.magpie.engine.api.stream.StreamProducer;
-import ravenworks.magpie.engine.api.stream.StreamProvider;
-import ravenworks.magpie.engine.api.stream.StreamRegistry;
+import ravenworks.magpie.engine.api.stream.*;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.awaitility.Awaitility.await;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
+
 
 class CoordinatorTest {
 
@@ -62,6 +51,7 @@ class CoordinatorTest {
         }
 
     }
+
 
     static class FakeConnector implements SourceConnector, SinkConnector {
 
@@ -98,6 +88,7 @@ class CoordinatorTest {
 
     }
 
+
     static class FakeStreamProvider implements StreamProvider {
 
         final List<String> created = new CopyOnWriteArrayList<>();
@@ -127,6 +118,7 @@ class CoordinatorTest {
 
     }
 
+
     static class FakeStreamProducer implements StreamProducer {
 
         @Override
@@ -140,6 +132,7 @@ class CoordinatorTest {
 
     }
 
+
     static class Harness {
 
         final FakeLeaderLock lock = new FakeLeaderLock();
@@ -152,6 +145,7 @@ class CoordinatorTest {
 
         Harness() {
             StreamRegistry streamRegistry = new StreamRegistry() {
+
                 @Override
                 public List<StreamDefinition> getStreams() {
                     return List.of(new StreamDefinition("s1", 1, Map.of()));

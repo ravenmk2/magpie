@@ -1,6 +1,5 @@
 package ravenworks.magpie.engine.impl.sink;
 
-import java.util.List;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -9,6 +8,8 @@ import ravenworks.magpie.engine.api.sink.SinkFactory;
 import ravenworks.magpie.engine.api.sink.SinkProvider;
 import ravenworks.magpie.engine.api.sink.TargetDefinition;
 import ravenworks.magpie.engine.api.stream.StreamProvider;
+
+import java.util.List;
 
 
 /**

@@ -5,15 +5,15 @@ import lombok.extern.slf4j.Slf4j;
 import ravenworks.magpie.common.util.CircuitBreaker;
 import ravenworks.magpie.engine.api.retry.RetryMessageStore;
 import ravenworks.magpie.engine.api.sink.SinkConnector;
+import ravenworks.magpie.engine.api.stream.StreamConsumer;
+import ravenworks.magpie.engine.api.stream.StreamDefinition;
+import ravenworks.magpie.engine.api.stream.StreamProvider;
+import ravenworks.magpie.engine.api.stream.StreamRegistry;
 import ravenworks.magpie.engine.impl.sink.deliverer.BestEffortDeliverer;
 import ravenworks.magpie.engine.impl.sink.deliverer.Deliverer;
 import ravenworks.magpie.engine.impl.sink.deliverer.KeyOrderedDeliverer;
 import ravenworks.magpie.engine.impl.sink.deliverer.OrderedDeliverer;
 import ravenworks.magpie.engine.impl.sink.worker.SinkWorker;
-import ravenworks.magpie.engine.api.stream.StreamConsumer;
-import ravenworks.magpie.engine.api.stream.StreamDefinition;
-import ravenworks.magpie.engine.api.stream.StreamProvider;
-import ravenworks.magpie.engine.api.stream.StreamRegistry;
 
 import java.net.http.HttpClient;
 import java.time.Duration;
@@ -100,12 +100,13 @@ public class HttpSinkConnector implements SinkConnector {
         var handler = new HttpSinkHandler(
                 workerName, this.httpClient, cb, createHandlerConfig(maxAttempts));
         Deliverer deliverer = switch (this.config.resolveDeliveryMode()) {
-            case ORDERED -> new OrderedDeliverer();
-            case KEY_ORDERED -> new KeyOrderedDeliverer();
-            case BEST_EFFORT -> new BestEffortDeliverer();
+            case ORDERED -> new OrderedDeliverer(workerName, handler, cb);
+            case KEY_ORDERED -> new KeyOrderedDeliverer(
+                    workerName, handler, this.config.getBatchSize(), cb, this.retryStore);
+            case BEST_EFFORT -> new BestEffortDeliverer(
+                    workerName, handler, this.config.getBatchSize(), cb, this.retryStore);
         };
-        return new SinkWorker(workerName, consumer, handler, cb, this.retryStore,
-                this.config.getBatchSize(), deliverer);
+        return new SinkWorker(workerName, consumer, this.config.getBatchSize(), deliverer);
     }
 
     private CircuitBreaker createCircuitBreaker(String workerName) {

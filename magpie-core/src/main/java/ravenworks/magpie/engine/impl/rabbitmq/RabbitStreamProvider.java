@@ -2,14 +2,14 @@ package ravenworks.magpie.engine.impl.rabbitmq;
 
 import com.rabbitmq.stream.Environment;
 import com.rabbitmq.stream.StreamCreator;
+import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.NonNull;
+import ravenworks.magpie.engine.api.stream.*;
+
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import lombok.extern.slf4j.Slf4j;
-import org.jspecify.annotations.NonNull;
-import ravenworks.magpie.engine.api.stream.*;
-import ravenworks.magpie.engine.impl.stream.*;
 
 
 /**

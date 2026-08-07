@@ -43,7 +43,9 @@ public class Coordinator {
     private final StreamProducer sourceProducer;
     private final Map<String, SourceConnector> sourceConnectors = new LinkedHashMap<>();
     private final Map<String, SinkConnector> sinkConnectors = new LinkedHashMap<>();
-    /** 连接器是否已启动；仅在事件循环线程读写 */
+    /**
+     * 连接器是否已启动；仅在事件循环线程读写
+     */
     private boolean connectorsRunning;
 
     public Coordinator(@NonNull LeaderLock leaderLock,

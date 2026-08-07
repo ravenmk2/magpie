@@ -1,6 +1,9 @@
 package ravenworks.magpie.engine.impl.sink.deliverer;
 
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import ravenworks.magpie.common.util.CircuitBreaker;
+import ravenworks.magpie.engine.api.sink.SinkHandler;
 import ravenworks.magpie.engine.api.sink.SinkResult;
 import ravenworks.magpie.engine.api.stream.ConsumerRecord;
 
@@ -21,34 +24,65 @@ public class OrderedDeliverer implements Deliverer {
     /** 原地重试与熔断等待的停顿节奏 */
     private static final long RETRY_PAUSE_NANOS = 200_000_000L;
 
-    @Override
-    public void onBatch(List<ConsumerRecord> records, SinkContext ctx) {
-        for (var record : records) {
-            if (!processRecord(record, ctx)) {
-                // INTERRUPTED 或停机：中止本批次
-                return;
-            }
-        }
+    private final String name;
+    private final SinkHandler handler;
+    private final CircuitBreaker circuitBreaker;
+    /** 停机标志：由 onShutdown 从停机线程写入，原地重试循环据此退出 */
+    private volatile boolean shutdownRequested;
+
+    public OrderedDeliverer(@NonNull String name,
+                            @NonNull SinkHandler handler,
+                            @NonNull CircuitBreaker circuitBreaker) {
+        this.name = name;
+        this.handler = handler;
+        this.circuitBreaker = circuitBreaker;
     }
 
-    private boolean processRecord(ConsumerRecord record, SinkContext ctx) {
-        while (ctx.isRunning()) {
-            if (ctx.circuitBreaker().isOpen()) {
+    @Override
+    public void onStart() {
+        this.shutdownRequested = false;
+    }
+
+    @Override
+    public void onShutdown() {
+        this.shutdownRequested = true;
+    }
+
+    @Override
+    public Action nextAction() {
+        return this.circuitBreaker.isOpen() ? Action.WAIT : Action.POLL;
+    }
+
+    @Override
+    public long onBatch(List<ConsumerRecord> records) {
+        long watermark = -1;
+        for (var record : records) {
+            if (!processRecord(record)) {
+                // INTERRUPTED 或停机：中止本批次，返回已处置前缀（中断信号）
+                return watermark;
+            }
+            watermark = record.getOffset();
+        }
+        return watermark;
+    }
+
+    private boolean processRecord(ConsumerRecord record) {
+        while (!this.shutdownRequested) {
+            if (this.circuitBreaker.isOpen()) {
                 LockSupport.parkNanos(RETRY_PAUSE_NANOS);
                 continue;
             }
             SinkResult result;
             try {
-                result = ctx.handler().handle(record).join();
+                result = this.handler.handle(record).join();
             } catch (Exception e) {
                 log.warn("[{}] handler error on offset={}, retry in place: {}",
-                        ctx.name(), record.getOffset(), e.toString());
+                        this.name, record.getOffset(), e.toString());
                 LockSupport.parkNanos(RETRY_PAUSE_NANOS);
                 continue;
             }
             switch (result.getStatus()) {
                 case SUCCESS:
-                    ctx.advance(record.getOffset());
                     return true;
                 case BACKOFF:
                     break;

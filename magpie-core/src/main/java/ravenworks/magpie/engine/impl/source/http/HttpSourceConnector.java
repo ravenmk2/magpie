@@ -3,11 +3,6 @@ package ravenworks.magpie.engine.impl.source.http;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import io.cloudevents.CloudEvent;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.regex.Pattern;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import ravenworks.magpie.common.util.PropertiesUtils;
@@ -20,6 +15,12 @@ import ravenworks.magpie.engine.api.source.http.TopicNotAllowedException;
 import ravenworks.magpie.engine.api.stream.MessageRecord;
 import ravenworks.magpie.engine.api.stream.StreamProducer;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.regex.Pattern;
+
 
 /**
  * @author Raven
@@ -30,7 +31,9 @@ public class HttpSourceConnector implements SourceConnector {
     private static final String EXT_TENANT_ID = "xtenantid";
     private static final String EXT_BUSINESS_KEY = "xbusinesskey";
     private static final int MAX_CACHE_SIZE = 10_000;
-    /** message_id 约定：32 字符 uuid7 hex */
+    /**
+     * message_id 约定：32 字符 uuid7 hex
+     */
     private static final Pattern UUID_HEX_32 = Pattern.compile("[0-9a-fA-F]{32}");
 
     private final HttpSourceRouter router;
