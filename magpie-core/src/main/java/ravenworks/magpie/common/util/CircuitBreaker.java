@@ -5,9 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 
 
 /**
- * 熔断器。批量投递模式下会被多个 handler 线程与 worker 线程并发访问，
- * 所有读写（含状态迁移）都在 monitor 内完成；临界区仅内存操作，无 IO。
- *
  * @author Raven
  */
 @Slf4j

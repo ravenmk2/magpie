@@ -2,6 +2,7 @@ package ravenworks.magpie.engine.impl.runtime;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import ravenworks.magpie.common.runtime.Lifecycle;
 import ravenworks.magpie.common.runtime.WorkLoop;
 import ravenworks.magpie.common.runtime.WorkLoopState;
 import ravenworks.magpie.engine.api.lock.LeaderLock;
@@ -26,7 +27,7 @@ import java.util.concurrent.TimeoutException;
  * @author Raven
  */
 @Slf4j
-public class Coordinator {
+public class Coordinator implements Lifecycle {
 
     private static final Object WAKEUP_SIGNAL = new Object();
     private static final int DEFAULT_IDLE_TIMEOUT_MS = 5_000;
@@ -80,10 +81,12 @@ public class Coordinator {
         this.workLoop = new WorkLoop("Coordinator", idleTimeoutMs, this::dispatch);
     }
 
+    @Override
     public void start() {
         this.workLoop.start();
     }
 
+    @Override
     public CompletableFuture<Void> shutdown() {
         return this.workLoop.shutdown();
     }

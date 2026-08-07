@@ -16,7 +16,7 @@ import java.util.function.Consumer;
  * @author Raven
  */
 @Slf4j
-public class WorkLoop {
+public class WorkLoop implements Lifecycle {
 
     private static final Object NOOP = new Object();
 
@@ -44,6 +44,7 @@ public class WorkLoop {
         return this.state.get();
     }
 
+    @Override
     public void start() {
         if (this.state.compareAndSet(WorkLoopState.NEW, WorkLoopState.RUNNING)) {
             this.thread = Thread.ofVirtual()
@@ -52,6 +53,7 @@ public class WorkLoop {
         }
     }
 
+    @Override
     public CompletableFuture<Void> shutdown() {
         if (this.state.compareAndSet(WorkLoopState.NEW, WorkLoopState.TERMINATED)) {
             this.termination.complete(null);
