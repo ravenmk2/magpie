@@ -3,7 +3,7 @@ package ravenworks.magpie.common.runtime;
 /**
  * @author Raven
  */
-public enum EventLoopState {
+public enum WorkLoopState {
     NEW,
     RUNNING,
     SHUTTING_DOWN,

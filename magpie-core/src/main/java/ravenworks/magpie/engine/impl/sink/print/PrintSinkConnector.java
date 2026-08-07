@@ -7,7 +7,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import ravenworks.magpie.common.runtime.EventLoop;
+import ravenworks.magpie.common.runtime.WorkLoop;
 import ravenworks.magpie.engine.api.sink.SinkConnector;
 import ravenworks.magpie.engine.api.stream.*;
 import ravenworks.magpie.engine.impl.stream.*;
@@ -79,7 +79,7 @@ public class PrintSinkConnector implements SinkConnector {
         private final String name;
         private final int partition;
         private final StreamConsumer consumer;
-        private final EventLoop eventLoop;
+        private final WorkLoop workLoop;
         private final AtomicLong received = new AtomicLong();
         private volatile boolean stopped;
 
@@ -87,25 +87,25 @@ public class PrintSinkConnector implements SinkConnector {
             this.name = name;
             this.partition = partition;
             this.consumer = consumer;
-            this.eventLoop = new EventLoop("snk-" + name + "-" + partition, 5_000, this::dispatch);
+            this.workLoop = new WorkLoop("snk-" + name + "-" + partition, 5_000, this::dispatch);
         }
 
         void start() {
             this.consumer.start();
-            this.eventLoop.start();
+            this.workLoop.start();
         }
 
         CompletableFuture<Void> shutdown() {
             this.stopped = true;
-            return this.eventLoop.shutdown();
+            return this.workLoop.shutdown();
         }
 
         private void dispatch(Object event) {
-            if (event instanceof EventLoop.Started) {
-                this.eventLoop.enqueue(POLL_SIGNAL);
+            if (event instanceof WorkLoop.Started) {
+                this.workLoop.enqueue(POLL_SIGNAL);
                 return;
             }
-            if (event instanceof EventLoop.PreShutdown) {
+            if (event instanceof WorkLoop.PreShutdown) {
                 try {
                     this.consumer.stop();
                 } catch (Exception e) {
@@ -116,7 +116,7 @@ public class PrintSinkConnector implements SinkConnector {
             if (this.stopped) {
                 return;
             }
-            if (event instanceof EventLoop.Idle || event == POLL_SIGNAL) {
+            if (event instanceof WorkLoop.Idle || event == POLL_SIGNAL) {
                 pollAndProcess();
             }
         }
@@ -129,7 +129,7 @@ public class PrintSinkConnector implements SinkConnector {
             if (!batch.isEmpty()) {
                 this.consumer.commit(batch.getLast().getOffset());
             }
-            this.eventLoop.enqueue(POLL_SIGNAL);
+            this.workLoop.enqueue(POLL_SIGNAL);
         }
 
         private void log(ConsumerRecord record) {

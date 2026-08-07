@@ -319,7 +319,7 @@ class CoordinatorTest {
     }
 
     @Test
-    void isRunningReflectsEventLoopState() throws Exception {
+    void isRunningReflectsWorkLoopState() throws Exception {
         var h = new Harness();
         assertFalse(h.coordinator.isRunning(), "not running before start");
 

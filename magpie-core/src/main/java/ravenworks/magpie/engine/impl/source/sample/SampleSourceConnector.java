@@ -2,7 +2,7 @@ package ravenworks.magpie.engine.impl.source.sample;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import ravenworks.magpie.common.runtime.EventLoop;
+import ravenworks.magpie.common.runtime.WorkLoop;
 import ravenworks.magpie.common.util.PropertiesUtils;
 import ravenworks.magpie.common.util.Uuids;
 import ravenworks.magpie.engine.api.source.SourceConnector;
@@ -26,7 +26,7 @@ public class SampleSourceConnector implements SourceConnector {
     private final String topic;
     private final StreamProducer producer;
     private final int batchSize;
-    private final EventLoop eventLoop;
+    private final WorkLoop workLoop;
 
     public SampleSourceConnector(@NonNull StreamProducer producer,
                                  @NonNull String name,
@@ -37,7 +37,7 @@ public class SampleSourceConnector implements SourceConnector {
         PropertiesUtils.bind(props, properties);
         this.topic = props.getTopic() != null && !props.getTopic().isBlank() ? props.getTopic() : name;
         this.batchSize = props.getBatchSize();
-        this.eventLoop = new EventLoop("src-" + name, props.getIdleTimeout(), this::dispatch);
+        this.workLoop = new WorkLoop("src-" + name, props.getIdleTimeout(), this::dispatch);
     }
 
     @Override
@@ -52,16 +52,16 @@ public class SampleSourceConnector implements SourceConnector {
 
     @Override
     public void start() {
-        this.eventLoop.start();
+        this.workLoop.start();
     }
 
     @Override
     public CompletableFuture<Void> shutdown() {
-        return this.eventLoop.shutdown();
+        return this.workLoop.shutdown();
     }
 
     private void dispatch(Object event) {
-        if (event instanceof EventLoop.Idle) {
+        if (event instanceof WorkLoop.Idle) {
             this.sendMessages();
         }
     }

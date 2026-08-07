@@ -12,30 +12,30 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class EventLoopTest {
+class WorkLoopTest {
 
     @Test
     void shutdownBeforeStartTerminatesImmediately() throws Exception {
-        var loop = new EventLoop("t-shutdown-new", 50, e -> {
+        var loop = new WorkLoop("t-shutdown-new", 50, e -> {
         });
         var termination = loop.shutdown();
         termination.get(2, TimeUnit.SECONDS);
-        assertEquals(EventLoopState.TERMINATED, loop.getState());
+        assertEquals(WorkLoopState.TERMINATED, loop.getState());
     }
 
     @Test
     void dispatchesStartedEnqueuedAndIdleEvents() {
         List<Object> received = new CopyOnWriteArrayList<>();
-        var loop = new EventLoop("t-dispatch", 20, received::add);
+        var loop = new WorkLoop("t-dispatch", 20, received::add);
         try {
             loop.start();
             loop.enqueue("hello");
 
             await().atMost(2, TimeUnit.SECONDS).until(() ->
-                    received.stream().anyMatch(EventLoop.Started.class::isInstance));
+                    received.stream().anyMatch(WorkLoop.Started.class::isInstance));
             await().atMost(2, TimeUnit.SECONDS).until(() -> received.contains("hello"));
             await().atMost(2, TimeUnit.SECONDS).until(() ->
-                    received.stream().anyMatch(EventLoop.Idle.class::isInstance));
+                    received.stream().anyMatch(WorkLoop.Idle.class::isInstance));
         } finally {
             loop.shutdown();
         }
@@ -44,7 +44,7 @@ class EventLoopTest {
     @Test
     void eventsEnqueuedBeforeStartAreProcessedAfterStart() {
         List<Object> received = new CopyOnWriteArrayList<>();
-        var loop = new EventLoop("t-prestart", 50, received::add);
+        var loop = new WorkLoop("t-prestart", 50, received::add);
         loop.enqueue("early");
         try {
             loop.start();
@@ -57,21 +57,21 @@ class EventLoopTest {
     @Test
     void shutdownDispatchesPreShutdownAndTerminated() throws Exception {
         List<Object> received = new CopyOnWriteArrayList<>();
-        var loop = new EventLoop("t-shutdown", 50, received::add);
+        var loop = new WorkLoop("t-shutdown", 50, received::add);
         loop.start();
-        await().atMost(2, TimeUnit.SECONDS).until(() -> loop.getState() == EventLoopState.RUNNING);
+        await().atMost(2, TimeUnit.SECONDS).until(() -> loop.getState() == WorkLoopState.RUNNING);
 
         var termination = loop.shutdown();
         termination.get(2, TimeUnit.SECONDS);
 
-        assertEquals(EventLoopState.TERMINATED, loop.getState());
-        assertTrue(received.stream().anyMatch(EventLoop.PreShutdown.class::isInstance));
-        assertTrue(received.stream().anyMatch(EventLoop.Terminated.class::isInstance));
+        assertEquals(WorkLoopState.TERMINATED, loop.getState());
+        assertTrue(received.stream().anyMatch(WorkLoop.PreShutdown.class::isInstance));
+        assertTrue(received.stream().anyMatch(WorkLoop.Terminated.class::isInstance));
     }
 
     @Test
     void shutdownTwiceReturnsSameFuture() {
-        var loop = new EventLoop("t-twice", 50, e -> {
+        var loop = new WorkLoop("t-twice", 50, e -> {
         });
         loop.start();
         var first = loop.shutdown();
@@ -83,7 +83,7 @@ class EventLoopTest {
     @Test
     void enqueueAfterShutdownIsDropped() throws Exception {
         List<Object> received = new CopyOnWriteArrayList<>();
-        var loop = new EventLoop("t-drop", 50, received::add);
+        var loop = new WorkLoop("t-drop", 50, received::add);
         loop.start();
         loop.shutdown().get(2, TimeUnit.SECONDS);
 
@@ -95,7 +95,7 @@ class EventLoopTest {
     @Test
     void handlerExceptionDoesNotStopLoop() {
         List<Object> received = new CopyOnWriteArrayList<>();
-        var loop = new EventLoop("t-throw", 50, event -> {
+        var loop = new WorkLoop("t-throw", 50, event -> {
             if ("boom".equals(event)) {
                 throw new RuntimeException("boom");
             }
@@ -114,10 +114,10 @@ class EventLoopTest {
     @Test
     void queuedEventsAreDrainedDuringShutdown() throws Exception {
         List<Object> received = new CopyOnWriteArrayList<>();
-        var loop = new EventLoop("t-drain", 5_000, received::add);
+        var loop = new WorkLoop("t-drain", 5_000, received::add);
         loop.start();
         await().atMost(2, TimeUnit.SECONDS).until(() ->
-                received.stream().anyMatch(EventLoop.Started.class::isInstance));
+                received.stream().anyMatch(WorkLoop.Started.class::isInstance));
 
         loop.enqueue("e1");
         loop.enqueue("e2");

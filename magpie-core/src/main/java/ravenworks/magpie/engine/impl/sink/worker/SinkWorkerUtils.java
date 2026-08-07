@@ -3,8 +3,8 @@ package ravenworks.magpie.engine.impl.sink.worker;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
-import ravenworks.magpie.common.runtime.EventLoop;
-import ravenworks.magpie.common.runtime.EventLoopState;
+import ravenworks.magpie.common.runtime.WorkLoop;
+import ravenworks.magpie.common.runtime.WorkLoopState;
 import ravenworks.magpie.engine.api.retry.RetryMessageStore;
 import ravenworks.magpie.engine.api.stream.ConsumerRecord;
 
@@ -41,13 +41,13 @@ class SinkWorkerUtils {
     static void saveWithRetry(@NonNull RetryMessageStore store,
                               @NonNull String name,
                               @NonNull ConsumerRecord record,
-                              @NonNull EventLoop eventLoop) {
+                              @NonNull WorkLoop workLoop) {
         while (true) {
             try {
                 store.save(name, record);
                 return;
             } catch (RuntimeException e) {
-                if (eventLoop.getState() != EventLoopState.RUNNING) {
+                if (workLoop.getState() != WorkLoopState.RUNNING) {
                     throw e;
                 }
                 log.warn("[{}] save retry message failed (offset={}), retry in 1s: {}",

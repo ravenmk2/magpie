@@ -2,8 +2,8 @@ package ravenworks.magpie.engine.impl.sink.worker;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import ravenworks.magpie.common.runtime.EventLoop;
-import ravenworks.magpie.common.runtime.EventLoopState;
+import ravenworks.magpie.common.runtime.WorkLoop;
+import ravenworks.magpie.common.runtime.WorkLoopState;
 import ravenworks.magpie.common.util.CircuitBreaker;
 import ravenworks.magpie.engine.api.sink.SinkHandler;
 import ravenworks.magpie.engine.api.sink.SinkResult;
@@ -28,7 +28,7 @@ public class OrderedSinkWorker implements SinkWorker {
     private final StreamConsumer consumer;
     private final SinkHandler handler;
     private final CircuitBreaker circuitBreaker;
-    private final EventLoop eventLoop;
+    private final WorkLoop workLoop;
     private final AtomicLong lastOffset = new AtomicLong(-1);
     private final int batchSize;
 
@@ -44,12 +44,12 @@ public class OrderedSinkWorker implements SinkWorker {
         this.handler = handler;
         this.circuitBreaker = circuitBreaker;
         this.batchSize = batchSize;
-        this.eventLoop = new EventLoop("snk-" + name, 1_000, this::dispatch);
+        this.workLoop = new WorkLoop("snk-" + name, 1_000, this::dispatch);
     }
 
     @Override
     public void start() {
-        this.eventLoop.start();
+        this.workLoop.start();
     }
 
     @Override
@@ -58,7 +58,7 @@ public class OrderedSinkWorker implements SinkWorker {
         if (t != null) {
             LockSupport.unpark(t);
         }
-        return this.eventLoop.shutdown();
+        return this.workLoop.shutdown();
     }
 
     private void dispatch(Object event) {
@@ -67,9 +67,9 @@ public class OrderedSinkWorker implements SinkWorker {
             return;
         }
         switch (event) {
-            case EventLoop.Started _ -> onStart();
-            case EventLoop.Idle _ -> onIdle();
-            case EventLoop.PreShutdown _ -> onPreShutdown();
+            case WorkLoop.Started _ -> onStart();
+            case WorkLoop.Idle _ -> onIdle();
+            case WorkLoop.PreShutdown _ -> onPreShutdown();
             default -> {
             }
         }
@@ -78,7 +78,7 @@ public class OrderedSinkWorker implements SinkWorker {
     private void onStart() {
         this.loopThread = Thread.currentThread();
         this.consumer.start();
-        this.eventLoop.enqueue(POLL_SIGNAL);
+        this.workLoop.enqueue(POLL_SIGNAL);
     }
 
     private void onIdle() {
@@ -99,7 +99,7 @@ public class OrderedSinkWorker implements SinkWorker {
     }
 
     private void pollAndProcess() {
-        if (this.eventLoop.getState() != EventLoopState.RUNNING) {
+        if (this.workLoop.getState() != WorkLoopState.RUNNING) {
             return;
         }
         if (this.circuitBreaker.isOpen()) {
@@ -114,7 +114,7 @@ public class OrderedSinkWorker implements SinkWorker {
                 this.consumer.commit(offset);
             }
         }
-        this.eventLoop.enqueue(POLL_SIGNAL);
+        this.workLoop.enqueue(POLL_SIGNAL);
     }
 
     private void processBatch(List<ConsumerRecord> batch) {
@@ -131,7 +131,7 @@ public class OrderedSinkWorker implements SinkWorker {
      * 失败消息不跳过、不落库、不提交 offset，重启后从未提交处重新投递。
      */
     private boolean processRecord(ConsumerRecord record) {
-        while (this.eventLoop.getState() == EventLoopState.RUNNING) {
+        while (this.workLoop.getState() == WorkLoopState.RUNNING) {
             if (this.circuitBreaker.isOpen()) {
                 LockSupport.parkNanos(RETRY_PAUSE_NANOS);
                 continue;

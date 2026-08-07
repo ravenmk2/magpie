@@ -2,8 +2,8 @@ package ravenworks.magpie.engine.impl.runtime;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import ravenworks.magpie.common.runtime.EventLoop;
-import ravenworks.magpie.common.runtime.EventLoopState;
+import ravenworks.magpie.common.runtime.WorkLoop;
+import ravenworks.magpie.common.runtime.WorkLoopState;
 import ravenworks.magpie.engine.api.lock.LeaderLock;
 import ravenworks.magpie.engine.api.sink.SinkConnector;
 import ravenworks.magpie.engine.api.sink.SinkFactory;
@@ -32,7 +32,7 @@ public class Coordinator {
     private static final int DEFAULT_IDLE_TIMEOUT_MS = 5_000;
     private static final long CONNECTOR_SHUTDOWN_TIMEOUT_MS = 30_000;
 
-    private final EventLoop eventLoop;
+    private final WorkLoop workLoop;
     private final LeaderLock leaderLock;
     private final StreamRegistry streamRegistry;
     private final StreamProvider streamProvider;
@@ -75,27 +75,27 @@ public class Coordinator {
         this.targetRegistry = targetRegistry;
         this.sinkFactory = sinkFactory;
         this.sourceProducer = sourceProducer;
-        this.eventLoop = new EventLoop("Coordinator", idleTimeoutMs, this::dispatch);
+        this.workLoop = new WorkLoop("Coordinator", idleTimeoutMs, this::dispatch);
     }
 
     public void start() {
-        this.eventLoop.start();
+        this.workLoop.start();
     }
 
     public CompletableFuture<Void> shutdown() {
-        return this.eventLoop.shutdown();
+        return this.workLoop.shutdown();
     }
 
     /**
      * 协调器是否处于运行中（含正在停机）：供生命周期装配如实上报状态。
      */
     public boolean isRunning() {
-        var state = this.eventLoop.getState();
-        return state == EventLoopState.RUNNING || state == EventLoopState.SHUTTING_DOWN;
+        var state = this.workLoop.getState();
+        return state == WorkLoopState.RUNNING || state == WorkLoopState.SHUTTING_DOWN;
     }
 
     public void wake() {
-        this.eventLoop.enqueue(WAKEUP_SIGNAL);
+        this.workLoop.enqueue(WAKEUP_SIGNAL);
     }
 
     private void dispatch(Object event) {
@@ -104,10 +104,10 @@ public class Coordinator {
             return;
         }
         switch (event) {
-            case EventLoop.Idle _ -> this.onIdle();
-            case EventLoop.Started _ -> this.onStarted();
-            case EventLoop.PreShutdown _ -> this.onPreShutdown();
-            case EventLoop.Terminated _ -> this.onTerminated();
+            case WorkLoop.Idle _ -> this.onIdle();
+            case WorkLoop.Started _ -> this.onStarted();
+            case WorkLoop.PreShutdown _ -> this.onPreShutdown();
+            case WorkLoop.Terminated _ -> this.onTerminated();
             default -> log.warn("Unhandled event: {}", event);
         }
     }

@@ -16,12 +16,12 @@ import java.util.function.Consumer;
  * @author Raven
  */
 @Slf4j
-public class EventLoop {
+public class WorkLoop {
 
     private static final Object NOOP = new Object();
 
-    private final AtomicReference<EventLoopState> state = new AtomicReference<>(EventLoopState.NEW);
-    private final BlockingQueue<Object> events = new LinkedBlockingQueue<>();
+    private final AtomicReference<WorkLoopState> state = new AtomicReference<>(WorkLoopState.NEW);
+    private final BlockingQueue<Object> queue = new LinkedBlockingQueue<>();
     private final CompletableFuture<Void> termination;
 
     @Getter
@@ -31,7 +31,7 @@ public class EventLoop {
 
     private volatile Thread thread;
 
-    public EventLoop(@NonNull String name,
+    public WorkLoop(@NonNull String name,
                      int idleTimeout,
                      @NonNull Consumer<Object> handler) {
         this.name = name;
@@ -40,12 +40,12 @@ public class EventLoop {
         this.termination = new GuardedCompletableFuture<>(() -> this.thread, this.name);
     }
 
-    public EventLoopState getState() {
+    public WorkLoopState getState() {
         return this.state.get();
     }
 
     public void start() {
-        if (this.state.compareAndSet(EventLoopState.NEW, EventLoopState.RUNNING)) {
+        if (this.state.compareAndSet(WorkLoopState.NEW, WorkLoopState.RUNNING)) {
             this.thread = Thread.ofVirtual()
                     .name(this.name)
                     .start(this::run);
@@ -53,49 +53,49 @@ public class EventLoop {
     }
 
     public CompletableFuture<Void> shutdown() {
-        if (this.state.compareAndSet(EventLoopState.NEW, EventLoopState.TERMINATED)) {
+        if (this.state.compareAndSet(WorkLoopState.NEW, WorkLoopState.TERMINATED)) {
             this.termination.complete(null);
             return this.termination;
         }
         var prev = this.state.getAndUpdate(s ->
-                s == EventLoopState.RUNNING ? EventLoopState.SHUTTING_DOWN : s);
-        if (prev == EventLoopState.TERMINATED || prev == EventLoopState.SHUTTING_DOWN) {
+                s == WorkLoopState.RUNNING ? WorkLoopState.SHUTTING_DOWN : s);
+        if (prev == WorkLoopState.TERMINATED || prev == WorkLoopState.SHUTTING_DOWN) {
             return this.termination;
         }
-        if (prev != EventLoopState.RUNNING) {
-            throw new IllegalStateException("Event loop is not running");
+        if (prev != WorkLoopState.RUNNING) {
+            throw new IllegalStateException("Work loop is not running");
         }
-        log.info("{} - Event loop shutdown requested", this.name);
-        this.events.add(NOOP);
+        log.info("{} - Work loop shutdown requested", this.name);
+        this.queue.add(NOOP);
         return this.termination;
     }
 
     public void enqueue(@NonNull Object event) {
-        synchronized (this.events) {
+        synchronized (this.queue) {
             var s = this.state.get();
-            if (s == EventLoopState.SHUTTING_DOWN || s == EventLoopState.TERMINATED) {
-                log.warn("{} - Event dropped, event loop is shutting down: {}",
+            if (s == WorkLoopState.SHUTTING_DOWN || s == WorkLoopState.TERMINATED) {
+                log.warn("{} - Event dropped, work loop is shutting down: {}",
                         this.name, event.getClass().getSimpleName());
                 return;
             }
-            this.events.add(event);
+            this.queue.add(event);
         }
     }
 
     private void run() {
-        log.info("{} - Event loop started", this.name);
+        log.info("{} - Work loop started", this.name);
         this.dispatch(Started.INSTANCE);
-        while (this.state.get() == EventLoopState.RUNNING) {
+        while (this.state.get() == WorkLoopState.RUNNING) {
             Object msg = this.poll(this.idleTimeout);
             this.dispatch(msg);
         }
 
-        log.info("{} - Event loop shutdown initiated", this.name);
+        log.info("{} - Work loop shutdown initiated", this.name);
         this.dispatch(PreShutdown.INSTANCE);
         while (true) {
             Object msg;
-            synchronized (this.events) {
-                msg = this.events.poll();
+            synchronized (this.queue) {
+                msg = this.queue.poll();
                 if (msg == null) {
                     break;
                 }
@@ -107,14 +107,14 @@ public class EventLoop {
         }
 
         this.dispatch(Terminated.INSTANCE);
-        this.state.set(EventLoopState.TERMINATED);
-        log.info("{} - Event loop exited", this.name);
+        this.state.set(WorkLoopState.TERMINATED);
+        log.info("{} - Work loop exited", this.name);
         this.termination.complete(null);
     }
 
     private Object poll(int timeout) {
         try {
-            Object msg = this.events.poll(timeout, TimeUnit.MILLISECONDS);
+            Object msg = this.queue.poll(timeout, TimeUnit.MILLISECONDS);
             return msg == null ? Idle.INSTANCE : msg;
         } catch (Throwable e) {
             log.error(e.getMessage(), e);

@@ -13,7 +13,7 @@ import java.util.function.Supplier;
  * A {@link CompletableFuture} that rejects blocking waits ({@code get} / {@code join})
  * from a designated thread, turning potential self-deadlocks into fast failures.
  *
- * <p>Typical use: an event loop's termination future must never be awaited from the
+ * <p>Typical use: a work loop's termination future must never be awaited from the
  * loop's own thread. The guarded thread is supplied lazily so it can be resolved
  * after construction (e.g. assigned when the loop starts); a {@code null} thread
  * disables the check.

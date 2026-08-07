@@ -2,8 +2,8 @@ package ravenworks.magpie.engine.impl.source.mysql;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import ravenworks.magpie.common.runtime.EventLoop;
-import ravenworks.magpie.common.runtime.EventLoopState;
+import ravenworks.magpie.common.runtime.WorkLoop;
+import ravenworks.magpie.common.runtime.WorkLoopState;
 import ravenworks.magpie.common.util.PropertiesUtils;
 import ravenworks.magpie.engine.api.source.SourceConnector;
 import ravenworks.magpie.engine.api.stream.MessageRecord;
@@ -33,7 +33,7 @@ public class MySqlPollSourceConnector implements SourceConnector {
     private final int retryDelay;
     private final SendStrategy sendStrategy;
     private final OutboxStore outboxStore;
-    private final EventLoop eventLoop;
+    private final WorkLoop workLoop;
 
     private long availableAt;
 
@@ -51,7 +51,7 @@ public class MySqlPollSourceConnector implements SourceConnector {
         this.batchSize = p.getBatchSize();
         this.retryDelay = p.getRetryDelay();
         this.sendStrategy = parseSendStrategy(p.getSendStrategy());
-        this.eventLoop = new EventLoop("src-" + name, p.getPollInterval(), this::dispatch);
+        this.workLoop = new WorkLoop("src-" + name, p.getPollInterval(), this::dispatch);
         log.info("Source '{}' initialized, sendStrategy={}", this.name, p.getSendStrategy());
     }
 
@@ -67,20 +67,20 @@ public class MySqlPollSourceConnector implements SourceConnector {
 
     @Override
     public void start() {
-        this.eventLoop.start();
+        this.workLoop.start();
     }
 
     @Override
     public CompletableFuture<Void> shutdown() {
-        return this.eventLoop.shutdown();
+        return this.workLoop.shutdown();
     }
 
     private void dispatch(Object event) {
-        if (event instanceof EventLoop.Started) {
+        if (event instanceof WorkLoop.Started) {
             this.outboxStore.ensureConnection();
-        } else if (event instanceof EventLoop.Idle) {
-            if (this.eventLoop.getState() == EventLoopState.RUNNING) {
-                this.eventLoop.enqueue(POLL_SIGNAL);
+        } else if (event instanceof WorkLoop.Idle) {
+            if (this.workLoop.getState() == WorkLoopState.RUNNING) {
+                this.workLoop.enqueue(POLL_SIGNAL);
             }
         } else if (event == POLL_SIGNAL) {
             try {
@@ -89,13 +89,13 @@ public class MySqlPollSourceConnector implements SourceConnector {
                 log.error("Poll failed for source '{}'", this.name, e);
                 this.availableAt = System.currentTimeMillis() + this.retryDelay;
             }
-        } else if (event instanceof EventLoop.PreShutdown) {
+        } else if (event instanceof WorkLoop.PreShutdown) {
             this.outboxStore.close();
         }
     }
 
     private void doPoll() {
-        if (this.eventLoop.getState() != EventLoopState.RUNNING) {
+        if (this.workLoop.getState() != WorkLoopState.RUNNING) {
             return;
         }
         if (System.currentTimeMillis() < this.availableAt) {
@@ -123,13 +123,13 @@ public class MySqlPollSourceConnector implements SourceConnector {
                 log.error("Send batch failed for source '{}', retry after {}", this.name, this.availableAt);
                 return;
             }
-            if (this.eventLoop.getState() != EventLoopState.RUNNING) {
+            if (this.workLoop.getState() != WorkLoopState.RUNNING) {
                 return;
             }
         }
 
         if (records.size() == this.batchSize) {
-            this.eventLoop.enqueue(POLL_SIGNAL);
+            this.workLoop.enqueue(POLL_SIGNAL);
         }
     }
 

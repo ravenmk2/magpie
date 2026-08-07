@@ -49,7 +49,7 @@ Null BusinessKey 归一为空字符串，即无 Key 消息视为同一条队列�
 ## 公共机制
 
 - **Offset 提交**：先处理（或持久化）再推进水位最后 Commit；正常关闭时提交最后 Offset。未提交的消息在重启后由 Stream 重新投递，这是重启恢复的兜底。
-- **落库瞬断**：`saveWithRetry` 每秒原地重试直到成功（DB 故障期 Commit 同样写不了库，停顿无损）；EventLoop 关闭中则放弃，Offset 未提交等重启重投。
+- **落库瞬断**：`saveWithRetry` 每秒原地重试直到成功（DB 故障期 Commit 同样写不了库，停顿无损）；WorkLoop 关闭中则放弃，Offset 未提交等重启重投。
 - **Worker 循环健壮性**：Poll/处理/状态更新抛异常时停顿 1s 后继续，不中断轮询、不空转。
 - **HTTP Sink Handler 失败分类**：
     - 系统性失败（连接/IO 错误、非法 URL 等 RuntimeException、5xx/408/429 等可重试状态码）：记熔断、按退避重试，受 `retry.inplaceAttempts` 约束；

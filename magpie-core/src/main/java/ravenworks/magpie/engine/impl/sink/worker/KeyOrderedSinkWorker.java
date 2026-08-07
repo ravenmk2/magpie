@@ -2,8 +2,8 @@ package ravenworks.magpie.engine.impl.sink.worker;
 
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import ravenworks.magpie.common.runtime.EventLoop;
-import ravenworks.magpie.common.runtime.EventLoopState;
+import ravenworks.magpie.common.runtime.WorkLoop;
+import ravenworks.magpie.common.runtime.WorkLoopState;
 import ravenworks.magpie.common.util.CircuitBreaker;
 import ravenworks.magpie.engine.api.retry.RetryMessageStore;
 import ravenworks.magpie.engine.api.retry.RetryRecord;
@@ -35,7 +35,7 @@ public class KeyOrderedSinkWorker implements SinkWorker {
     private final SinkHandler handler;
     private final CircuitBreaker circuitBreaker;
     private final RetryMessageStore retryStore;
-    private final EventLoop eventLoop;
+    private final WorkLoop workLoop;
     private final AtomicLong lastOffset = new AtomicLong(-1);
     private final int batchSize;
 
@@ -59,12 +59,12 @@ public class KeyOrderedSinkWorker implements SinkWorker {
         this.circuitBreaker = circuitBreaker;
         this.retryStore = retryStore;
         this.batchSize = batchSize;
-        this.eventLoop = new EventLoop("snk-" + name, 1_000, this::dispatch);
+        this.workLoop = new WorkLoop("snk-" + name, 1_000, this::dispatch);
     }
 
     @Override
     public void start() {
-        this.eventLoop.start();
+        this.workLoop.start();
     }
 
     @Override
@@ -73,7 +73,7 @@ public class KeyOrderedSinkWorker implements SinkWorker {
         if (t != null) {
             LockSupport.unpark(t);
         }
-        return this.eventLoop.shutdown();
+        return this.workLoop.shutdown();
     }
 
     private void dispatch(Object event) {
@@ -82,9 +82,9 @@ public class KeyOrderedSinkWorker implements SinkWorker {
             return;
         }
         switch (event) {
-            case EventLoop.Started _ -> onStart();
-            case EventLoop.Idle _ -> onIdle();
-            case EventLoop.PreShutdown _ -> onPreShutdown();
+            case WorkLoop.Started _ -> onStart();
+            case WorkLoop.Idle _ -> onIdle();
+            case WorkLoop.PreShutdown _ -> onPreShutdown();
             default -> {
             }
         }
@@ -101,7 +101,7 @@ public class KeyOrderedSinkWorker implements SinkWorker {
         } else {
             this.state = State.NORMAL;
         }
-        this.eventLoop.enqueue(POLL_SIGNAL);
+        this.workLoop.enqueue(POLL_SIGNAL);
     }
 
     private void onIdle() {
@@ -127,7 +127,7 @@ public class KeyOrderedSinkWorker implements SinkWorker {
     }
 
     private void pollAndProcess() {
-        if (this.eventLoop.getState() != EventLoopState.RUNNING) {
+        if (this.workLoop.getState() != WorkLoopState.RUNNING) {
             return;
         }
         if (this.circuitBreaker.isOpen()) {
@@ -166,7 +166,7 @@ public class KeyOrderedSinkWorker implements SinkWorker {
             LockSupport.parkNanos(1_000_000_000L);
         } finally {
             // 异常（如重试落库失败）不能中断轮询循环
-            this.eventLoop.enqueue(POLL_SIGNAL);
+            this.workLoop.enqueue(POLL_SIGNAL);
         }
     }
 
@@ -217,7 +217,7 @@ public class KeyOrderedSinkWorker implements SinkWorker {
      */
     private void saveWithGapTracking(ConsumerRecord record) {
         try {
-            SinkWorkerUtils.saveWithRetry(this.retryStore, this.name, record, this.eventLoop);
+            SinkWorkerUtils.saveWithRetry(this.retryStore, this.name, record, this.workLoop);
         } catch (RuntimeException e) {
             this.firstUnpersistedOffset = Math.min(this.firstUnpersistedOffset, record.getOffset());
             throw e;
@@ -325,7 +325,7 @@ public class KeyOrderedSinkWorker implements SinkWorker {
             LockSupport.parkNanos(1_000_000_000L);
         } finally {
             // 异常（如重试状态更新失败）不能中断轮询循环
-            this.eventLoop.enqueue(POLL_SIGNAL);
+            this.workLoop.enqueue(POLL_SIGNAL);
         }
     }
 
