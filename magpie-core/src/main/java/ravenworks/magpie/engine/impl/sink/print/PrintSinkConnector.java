@@ -3,6 +3,7 @@ package ravenworks.magpie.engine.impl.sink.print;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import ravenworks.magpie.common.runtime.WorkLoop;
+import ravenworks.magpie.common.runtime.WorkLoopSignal;
 import ravenworks.magpie.engine.api.sink.SinkConnector;
 import ravenworks.magpie.engine.api.stream.*;
 
@@ -101,11 +102,11 @@ public class PrintSinkConnector implements SinkConnector {
         }
 
         private void dispatch(Object event) {
-            if (event instanceof WorkLoop.Started) {
+            if (event == WorkLoopSignal.STARTED) {
                 this.workLoop.enqueue(POLL_SIGNAL);
                 return;
             }
-            if (event instanceof WorkLoop.PreShutdown) {
+            if (event == WorkLoopSignal.PRE_SHUTDOWN) {
                 try {
                     this.consumer.stop();
                 } catch (Exception e) {
@@ -116,7 +117,7 @@ public class PrintSinkConnector implements SinkConnector {
             if (this.stopped) {
                 return;
             }
-            if (event instanceof WorkLoop.Idle || event == POLL_SIGNAL) {
+            if (event == WorkLoopSignal.IDLE || event == POLL_SIGNAL) {
                 pollAndProcess();
             }
         }

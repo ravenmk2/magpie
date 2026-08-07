@@ -22,7 +22,7 @@ class WorkLoopTest {
     }
 
     @Test
-    void dispatchesStartedEnqueuedAndIdleEvents() {
+    void dispatchesStartedEnqueuedAndIdleMessages() {
         List<Object> received = new CopyOnWriteArrayList<>();
         var loop = new WorkLoop("t-dispatch", 20, received::add);
         try {
@@ -30,17 +30,17 @@ class WorkLoopTest {
             loop.enqueue("hello");
 
             await().atMost(2, TimeUnit.SECONDS).until(() ->
-                    received.stream().anyMatch(WorkLoop.Started.class::isInstance));
+                    received.contains(WorkLoopSignal.STARTED));
             await().atMost(2, TimeUnit.SECONDS).until(() -> received.contains("hello"));
             await().atMost(2, TimeUnit.SECONDS).until(() ->
-                    received.stream().anyMatch(WorkLoop.Idle.class::isInstance));
+                    received.contains(WorkLoopSignal.IDLE));
         } finally {
             loop.shutdown();
         }
     }
 
     @Test
-    void eventsEnqueuedBeforeStartAreProcessedAfterStart() {
+    void messagesEnqueuedBeforeStartAreProcessedAfterStart() {
         List<Object> received = new CopyOnWriteArrayList<>();
         var loop = new WorkLoop("t-prestart", 50, received::add);
         loop.enqueue("early");
@@ -63,8 +63,8 @@ class WorkLoopTest {
         termination.get(2, TimeUnit.SECONDS);
 
         assertEquals(WorkLoopState.TERMINATED, loop.getState());
-        assertTrue(received.stream().anyMatch(WorkLoop.PreShutdown.class::isInstance));
-        assertTrue(received.stream().anyMatch(WorkLoop.Terminated.class::isInstance));
+        assertTrue(received.contains(WorkLoopSignal.PRE_SHUTDOWN));
+        assertTrue(received.contains(WorkLoopSignal.TERMINATED));
     }
 
     @Test
@@ -93,11 +93,11 @@ class WorkLoopTest {
     @Test
     void handlerExceptionDoesNotStopLoop() {
         List<Object> received = new CopyOnWriteArrayList<>();
-        var loop = new WorkLoop("t-throw", 50, event -> {
-            if ("boom".equals(event)) {
+        var loop = new WorkLoop("t-throw", 50, message -> {
+            if ("boom".equals(message)) {
                 throw new RuntimeException("boom");
             }
-            received.add(event);
+            received.add(message);
         });
         try {
             loop.start();
@@ -110,12 +110,12 @@ class WorkLoopTest {
     }
 
     @Test
-    void queuedEventsAreDrainedDuringShutdown() throws Exception {
+    void queuedMessagesAreDrainedDuringShutdown() throws Exception {
         List<Object> received = new CopyOnWriteArrayList<>();
         var loop = new WorkLoop("t-drain", 5_000, received::add);
         loop.start();
         await().atMost(2, TimeUnit.SECONDS).until(() ->
-                received.stream().anyMatch(WorkLoop.Started.class::isInstance));
+                received.contains(WorkLoopSignal.STARTED));
 
         loop.enqueue("e1");
         loop.enqueue("e2");

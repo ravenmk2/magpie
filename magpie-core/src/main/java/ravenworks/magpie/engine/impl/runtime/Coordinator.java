@@ -4,6 +4,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import ravenworks.magpie.common.runtime.Lifecycle;
 import ravenworks.magpie.common.runtime.WorkLoop;
+import ravenworks.magpie.common.runtime.WorkLoopSignal;
 import ravenworks.magpie.common.runtime.WorkLoopState;
 import ravenworks.magpie.engine.api.lock.LeaderLock;
 import ravenworks.magpie.engine.api.sink.SinkConnector;
@@ -108,13 +109,16 @@ public class Coordinator implements Lifecycle {
             this.onWakeup();
             return;
         }
-        switch (event) {
-            case WorkLoop.Idle _ -> this.onIdle();
-            case WorkLoop.Started _ -> this.onStarted();
-            case WorkLoop.PreShutdown _ -> this.onPreShutdown();
-            case WorkLoop.Terminated _ -> this.onTerminated();
-            default -> log.warn("Unhandled event: {}", event);
+        if (event instanceof WorkLoopSignal signal) {
+            switch (signal) {
+                case IDLE -> this.onIdle();
+                case STARTED -> this.onStarted();
+                case PRE_SHUTDOWN -> this.onPreShutdown();
+                case TERMINATED -> this.onTerminated();
+            }
+            return;
         }
+        log.warn("Unhandled event: {}", event);
     }
 
     private void onWakeup() {

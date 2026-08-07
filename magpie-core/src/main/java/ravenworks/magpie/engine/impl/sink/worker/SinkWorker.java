@@ -4,6 +4,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import ravenworks.magpie.common.runtime.Lifecycle;
 import ravenworks.magpie.common.runtime.WorkLoop;
+import ravenworks.magpie.common.runtime.WorkLoopSignal;
 import ravenworks.magpie.common.runtime.WorkLoopState;
 import ravenworks.magpie.engine.api.stream.ConsumerRecord;
 import ravenworks.magpie.engine.api.stream.StreamConsumer;
@@ -73,11 +74,13 @@ public class SinkWorker implements Lifecycle {
             this.pollAndProcess();
             return;
         }
-        switch (event) {
-            case WorkLoop.Started _ -> onStart();
-            case WorkLoop.Idle _ -> pollAndProcess();
-            case WorkLoop.PreShutdown _ -> onPreShutdown();
-            default -> {
+        if (event instanceof WorkLoopSignal signal) {
+            switch (signal) {
+                case STARTED -> onStart();
+                case IDLE -> pollAndProcess();
+                case PRE_SHUTDOWN -> onPreShutdown();
+                case TERMINATED -> {
+                }
             }
         }
     }

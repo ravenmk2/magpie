@@ -72,28 +72,28 @@ public class WorkLoop implements Lifecycle {
         return this.termination;
     }
 
-    public void enqueue(@NonNull Object event) {
+    public void enqueue(@NonNull Object message) {
         synchronized (this.queue) {
             var s = this.state.get();
             if (s == WorkLoopState.SHUTTING_DOWN || s == WorkLoopState.TERMINATED) {
-                log.warn("{} - Event dropped, work loop is shutting down: {}",
-                        this.name, event.getClass().getSimpleName());
+                log.warn("{} - Message dropped, work loop is shutting down: {}",
+                        this.name, message.getClass().getSimpleName());
                 return;
             }
-            this.queue.add(event);
+            this.queue.add(message);
         }
     }
 
     private void run() {
         log.info("{} - Work loop started", this.name);
-        this.dispatch(Started.INSTANCE);
+        this.dispatch(WorkLoopSignal.STARTED);
         while (this.state.get() == WorkLoopState.RUNNING) {
             Object msg = this.poll(this.idleTimeout);
             this.dispatch(msg);
         }
 
         log.info("{} - Work loop shutdown initiated", this.name);
-        this.dispatch(PreShutdown.INSTANCE);
+        this.dispatch(WorkLoopSignal.PRE_SHUTDOWN);
         while (true) {
             Object msg;
             synchronized (this.queue) {
@@ -102,13 +102,13 @@ public class WorkLoop implements Lifecycle {
                     break;
                 }
             }
-            if (msg instanceof Idle) {
+            if (msg == WorkLoopSignal.IDLE) {
                 continue;
             }
             this.dispatch(msg);
         }
 
-        this.dispatch(Terminated.INSTANCE);
+        this.dispatch(WorkLoopSignal.TERMINATED);
         this.state.set(WorkLoopState.TERMINATED);
         log.info("{} - Work loop exited", this.name);
         this.termination.complete(null);
@@ -117,7 +117,7 @@ public class WorkLoop implements Lifecycle {
     private Object poll(int timeout) {
         try {
             Object msg = this.queue.poll(timeout, TimeUnit.MILLISECONDS);
-            return msg == null ? Idle.INSTANCE : msg;
+            return msg == null ? WorkLoopSignal.IDLE : msg;
         } catch (Throwable e) {
             log.error(e.getMessage(), e);
         }
@@ -133,34 +133,6 @@ public class WorkLoop implements Lifecycle {
         } catch (Throwable e) {
             log.error(e.getMessage(), e);
         }
-    }
-
-
-    public record Idle() {
-
-        private static final Idle INSTANCE = new Idle();
-
-    }
-
-
-    public record Started() {
-
-        private static final Started INSTANCE = new Started();
-
-    }
-
-
-    public record PreShutdown() {
-
-        private static final PreShutdown INSTANCE = new PreShutdown();
-
-    }
-
-
-    public record Terminated() {
-
-        private static final Terminated INSTANCE = new Terminated();
-
     }
 
 }

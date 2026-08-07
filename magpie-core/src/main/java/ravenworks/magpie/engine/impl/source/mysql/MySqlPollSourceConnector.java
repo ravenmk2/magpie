@@ -3,6 +3,7 @@ package ravenworks.magpie.engine.impl.source.mysql;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import ravenworks.magpie.common.runtime.WorkLoop;
+import ravenworks.magpie.common.runtime.WorkLoopSignal;
 import ravenworks.magpie.common.runtime.WorkLoopState;
 import ravenworks.magpie.common.util.PropertiesUtils;
 import ravenworks.magpie.engine.api.source.SourceConnector;
@@ -76,9 +77,9 @@ public class MySqlPollSourceConnector implements SourceConnector {
     }
 
     private void dispatch(Object event) {
-        if (event instanceof WorkLoop.Started) {
+        if (event == WorkLoopSignal.STARTED) {
             this.outboxStore.ensureConnection();
-        } else if (event instanceof WorkLoop.Idle) {
+        } else if (event == WorkLoopSignal.IDLE) {
             if (this.workLoop.getState() == WorkLoopState.RUNNING) {
                 this.workLoop.enqueue(POLL_SIGNAL);
             }
@@ -89,7 +90,7 @@ public class MySqlPollSourceConnector implements SourceConnector {
                 log.error("Poll failed for source '{}'", this.name, e);
                 this.availableAt = System.currentTimeMillis() + this.retryDelay;
             }
-        } else if (event instanceof WorkLoop.PreShutdown) {
+        } else if (event == WorkLoopSignal.PRE_SHUTDOWN) {
             this.outboxStore.close();
         }
     }

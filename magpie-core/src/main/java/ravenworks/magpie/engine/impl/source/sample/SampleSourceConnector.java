@@ -3,6 +3,7 @@ package ravenworks.magpie.engine.impl.source.sample;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import ravenworks.magpie.common.runtime.WorkLoop;
+import ravenworks.magpie.common.runtime.WorkLoopSignal;
 import ravenworks.magpie.common.util.PropertiesUtils;
 import ravenworks.magpie.common.util.Uuids;
 import ravenworks.magpie.engine.api.source.SourceConnector;
@@ -61,7 +62,7 @@ public class SampleSourceConnector implements SourceConnector {
     }
 
     private void dispatch(Object event) {
-        if (event instanceof WorkLoop.Idle) {
+        if (event == WorkLoopSignal.IDLE) {
             this.sendMessages();
         }
     }
