@@ -136,7 +136,7 @@ public class PrintSinkConnector implements SinkConnector {
         private void log(ConsumerRecord record) {
             long count = this.received.incrementAndGet();
             log.info("[{}] partition={} offset={} count={} payload={}",
-                    this.name, this.partition, record.getOffset(), count, new String(record.getPayload()));
+                    this.name, this.partition, record.getOffset(), count, new String(record.getMessage().getPayload()));
         }
 
     }

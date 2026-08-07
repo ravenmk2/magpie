@@ -1,6 +1,7 @@
 package ravenworks.magpie.engine.impl.sink.deliverer;
 
 import ravenworks.magpie.engine.api.stream.ConsumerRecord;
+import ravenworks.magpie.engine.api.stream.MessageRecord;
 import ravenworks.magpie.engine.api.stream.StreamConsumer;
 
 import java.time.Duration;
@@ -57,13 +58,15 @@ class FakeStreamConsumer implements StreamConsumer {
     }
 
     static ConsumerRecord record(long offset, String businessKey) {
-        return new ConsumerRecord()
-                .setOffset(offset)
+        var message = new MessageRecord()
                 .setId("msg-" + offset)
                 .setType("t.test")
                 .setTopic("topic")
                 .setEventTime(LocalDateTime.now())
                 .setBusinessKey(businessKey);
+        return new ConsumerRecord()
+                .setOffset(offset)
+                .setMessage(message);
     }
 
 }

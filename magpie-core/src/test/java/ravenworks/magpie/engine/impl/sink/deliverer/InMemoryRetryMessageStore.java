@@ -61,7 +61,8 @@ class InMemoryRetryMessageStore implements RetryMessageStore {
         }
         // 与 JDBC 实现一致: businessKey 归一化为 "", 且同 key 新条目的
         // 可重试时间不早于更老条目(维持 key 内 offset 顺序)
-        String key = record.getBusinessKey() != null ? record.getBusinessKey() : "";
+        var message = record.getMessage();
+        String key = message.getBusinessKey() != null ? message.getBusinessKey() : "";
         var now = LocalDateTime.now();
         LocalDateTime retryAt = null;
         for (var r : this.records) {
@@ -74,14 +75,14 @@ class InMemoryRetryMessageStore implements RetryMessageStore {
         this.records.add(new RetryRecord()
                 .setId("retry-" + this.idSeq.incrementAndGet())
                 .setOffset(record.getOffset())
-                .setMessageId(record.getId())
-                .setType(record.getType())
-                .setEventTime(record.getEventTime())
-                .setTopic(record.getTopic())
-                .setTenantId(record.getTenantId())
+                .setMessageId(message.getId())
+                .setType(message.getType())
+                .setEventTime(message.getEventTime())
+                .setTopic(message.getTopic())
+                .setTenantId(message.getTenantId())
                 .setBusinessKey(key)
-                .setHeaders(record.getHeaders())
-                .setPayload(record.getPayload())
+                .setHeaders(message.getHeaders())
+                .setPayload(message.getPayload())
                 .setRetryAt(retryAt));
     }
 

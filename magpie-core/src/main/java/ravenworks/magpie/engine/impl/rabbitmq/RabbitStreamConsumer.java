@@ -149,25 +149,24 @@ public class RabbitStreamConsumer implements StreamConsumer {
     }
 
     private ConsumerRecord convert(@NonNull Context ctx, @NonNull Message msg) {
-        var record = new ConsumerRecord();
-        record.setOffset(ctx.offset());
-        record.setPayload(msg.getBodyAsBinary());
-        record.setTopic(this.topic);
+        var message = new MessageRecord();
+        message.setPayload(msg.getBodyAsBinary());
+        message.setTopic(this.topic);
 
         if (msg.getProperties() != null) {
             Object mid = msg.getProperties().getMessageId();
             if (mid != null) {
-                record.setId(mid.toString());
+                message.setId(mid.toString());
             }
         }
         Map<String, Object> appProps = msg.getApplicationProperties();
         if (appProps != null) {
-            record.setType((String) appProps.get(ReservedHeaders.MSG_TYPE));
-            record.setTenantId((String) appProps.get(ReservedHeaders.MSG_TENANT_ID));
-            record.setBusinessKey((String) appProps.get(ReservedHeaders.MSG_BUSINESS_KEY));
+            message.setType((String) appProps.get(ReservedHeaders.MSG_TYPE));
+            message.setTenantId((String) appProps.get(ReservedHeaders.MSG_TENANT_ID));
+            message.setBusinessKey((String) appProps.get(ReservedHeaders.MSG_BUSINESS_KEY));
             String timeStr = (String) appProps.get(ReservedHeaders.MSG_EVENT_TIME);
             if (timeStr != null) {
-                record.setEventTime(TimeUtils.parseRfc3339(timeStr));
+                message.setEventTime(TimeUtils.parseRfc3339(timeStr));
             }
             Map<String, String> headers = new HashMap<>();
             appProps.forEach((k, v) -> {
@@ -175,9 +174,11 @@ public class RabbitStreamConsumer implements StreamConsumer {
                     headers.put(k, s);
                 }
             });
-            record.setHeaders(headers);
+            message.setHeaders(headers);
         }
-        return record;
+        return new ConsumerRecord()
+                .setOffset(ctx.offset())
+                .setMessage(message);
     }
 
     private record QueuedItem(Context ctx, Message msg) {

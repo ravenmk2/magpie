@@ -101,7 +101,7 @@ public class HttpSinkHandler implements SinkHandler {
                 .map(record -> this.handle(record).exceptionally(e -> {
                     // 兜底隔离: 任何单条消息的异常只影响本条, 不连坐整批
                     log.error("[{}] msgId={} unexpected error, marking as failure",
-                            this.name, record.getId(), e);
+                            this.name, record.getMessage().getId(), e);
                     return new SinkResult()
                             .setStatus(SinkStatus.FAILURE)
                             .setError("unexpected: " + e)
@@ -138,7 +138,7 @@ public class HttpSinkHandler implements SinkHandler {
             body = JSON_FORMAT.serialize(buildCloudEvent(record));
         } catch (Exception e) {
             // 消息自身非法（如 id 缺失），重试无意义且与端点无关：不计熔断，仅本条失败
-            log.error("[{}] msgId={} serialize failed, marking as failure", this.name, record.getId(), e);
+            log.error("[{}] msgId={} serialize failed, marking as failure", this.name, record.getMessage().getId(), e);
             return new SinkResult()
                     .setStatus(SinkStatus.FAILURE)
                     .setError("serialize failed: " + e.getMessage())
@@ -182,7 +182,7 @@ public class HttpSinkHandler implements SinkHandler {
                 if (!this.retryStatusCodes.contains(statusCode)) {
                     this.circuitBreaker.recordFailure();
                     log.warn("[{}] msgId={} HTTP {} is not retryable, giving up",
-                            this.name, record.getId(), statusCode);
+                            this.name, record.getMessage().getId(), statusCode);
                     return new SinkResult()
                             .setStatus(SinkStatus.FAILURE)
                             .setAttempts(attempt)
@@ -193,7 +193,7 @@ public class HttpSinkHandler implements SinkHandler {
                 this.circuitBreaker.recordFailure();
                 long backoffDelay = computeBackoffDelay(this.backoff, this.delayMs, this.maxDelayMs, attempt);
                 log.warn("[{}] msgId={} HTTP {} (attempt {}), retry in {}ms",
-                        this.name, record.getId(), statusCode, attempt, backoffDelay);
+                        this.name, record.getMessage().getId(), statusCode, attempt, backoffDelay);
                 backoff(backoffDelay);
 
             } catch (IOException | RuntimeException e) {
@@ -201,7 +201,7 @@ public class HttpSinkHandler implements SinkHandler {
                 this.circuitBreaker.recordFailure();
                 long backoffDelay = computeBackoffDelay(this.backoff, this.delayMs, this.maxDelayMs, attempt);
                 log.warn("[{}] msgId={} send error (attempt {}), retry in {}ms: {}",
-                        this.name, record.getId(), attempt, backoffDelay, e.toString());
+                        this.name, record.getMessage().getId(), attempt, backoffDelay, e.toString());
                 backoff(backoffDelay);
 
             } catch (InterruptedException e) {
@@ -226,28 +226,29 @@ public class HttpSinkHandler implements SinkHandler {
     }
 
     static CloudEvent buildCloudEvent(ConsumerRecord record) {
+        var message = record.getMessage();
         var builder = CloudEventBuilder.v1()
-                .withId(record.getId())
+                .withId(message.getId())
                 .withSource(SOURCE)
-                .withType(record.getType())
-                .withSubject(record.getTopic())
+                .withType(message.getType())
+                .withSubject(message.getTopic())
                 .withDataContentType("application/json");
 
-        if (record.getEventTime() != null) {
-            builder.withTime(record.getEventTime().atZone(ZoneId.systemDefault()).toOffsetDateTime());
+        if (message.getEventTime() != null) {
+            builder.withTime(message.getEventTime().atZone(ZoneId.systemDefault()).toOffsetDateTime());
         }
-        if (record.getPayload() != null) {
-            builder.withData(record.getPayload());
+        if (message.getPayload() != null) {
+            builder.withData(message.getPayload());
         }
-        if (record.getTenantId() != null && !record.getTenantId().isBlank()) {
-            builder.withExtension("xtenantid", record.getTenantId());
+        if (message.getTenantId() != null && !message.getTenantId().isBlank()) {
+            builder.withExtension("xtenantid", message.getTenantId());
         }
-        if (record.getBusinessKey() != null && !record.getBusinessKey().isBlank()) {
-            builder.withExtension("xbusinesskey", record.getBusinessKey());
+        if (message.getBusinessKey() != null && !message.getBusinessKey().isBlank()) {
+            builder.withExtension("xbusinesskey", message.getBusinessKey());
         }
         builder.withExtension("xoffset", String.valueOf(record.getOffset()));
-        if (record.getHeaders() != null && !record.getHeaders().isEmpty()) {
-            builder.withExtension("xheaders", JsonUtils.encode(record.getHeaders()));
+        if (message.getHeaders() != null && !message.getHeaders().isEmpty()) {
+            builder.withExtension("xheaders", JsonUtils.encode(message.getHeaders()));
         }
 
         return builder.build();

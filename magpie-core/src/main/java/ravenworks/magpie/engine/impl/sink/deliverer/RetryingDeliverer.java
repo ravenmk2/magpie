@@ -9,6 +9,7 @@ import ravenworks.magpie.engine.api.sink.SinkHandler;
 import ravenworks.magpie.engine.api.sink.SinkResult;
 import ravenworks.magpie.engine.api.sink.SinkStatus;
 import ravenworks.magpie.engine.api.stream.ConsumerRecord;
+import ravenworks.magpie.engine.api.stream.MessageRecord;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -191,8 +192,7 @@ public abstract class RetryingDeliverer implements Deliverer {
     }
 
     protected static ConsumerRecord toConsumerRecord(RetryRecord e) {
-        return new ConsumerRecord()
-                .setOffset(e.getOffset())
+        var message = new MessageRecord()
                 .setId(e.getMessageId())
                 .setType(e.getType())
                 .setEventTime(e.getEventTime())
@@ -201,6 +201,9 @@ public abstract class RetryingDeliverer implements Deliverer {
                 .setBusinessKey(e.getBusinessKey())
                 .setHeaders(e.getHeaders())
                 .setPayload(e.getPayload());
+        return new ConsumerRecord()
+                .setOffset(e.getOffset())
+                .setMessage(message);
     }
 
 }

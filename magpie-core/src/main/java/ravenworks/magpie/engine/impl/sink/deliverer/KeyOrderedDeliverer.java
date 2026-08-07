@@ -133,7 +133,8 @@ public class KeyOrderedDeliverer extends RetryingDeliverer {
      * 否则 null key 消息既不阻塞也不分流，key 内顺序无从保证。
      */
     private static String keyOf(ConsumerRecord record) {
-        return record.getBusinessKey() != null ? record.getBusinessKey() : "";
+        var key = record.getMessage().getBusinessKey();
+        return key != null ? key : "";
     }
 
 }

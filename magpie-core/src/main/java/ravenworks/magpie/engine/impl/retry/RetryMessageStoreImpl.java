@@ -63,17 +63,18 @@ public class RetryMessageStoreImpl implements RetryMessageStore {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void save(@NonNull String consumer, @NonNull ConsumerRecord record) {
+        var message = record.getMessage();
         var logEntity = new MessageLogEntity();
         logEntity.setId(Uuids.uuid7Hex());
-        logEntity.setMessageId(normalizeMessageId(record.getId()));
-        logEntity.setType(nullToEmpty(record.getType()));
-        logEntity.setEventTime(record.getEventTime() != null ? record.getEventTime() : LocalDateTime.now());
-        logEntity.setTopic(nullToEmpty(record.getTopic()));
-        logEntity.setTenantId(nullToEmpty(record.getTenantId()));
-        logEntity.setBusinessKey(nullToEmpty(record.getBusinessKey()));
-        logEntity.setHeaders(record.getHeaders() != null ? record.getHeaders() : Map.of());
-        logEntity.setPayload(record.getPayload() != null
-                ? Base64.getEncoder().encodeToString(record.getPayload())
+        logEntity.setMessageId(normalizeMessageId(message.getId()));
+        logEntity.setType(nullToEmpty(message.getType()));
+        logEntity.setEventTime(message.getEventTime() != null ? message.getEventTime() : LocalDateTime.now());
+        logEntity.setTopic(nullToEmpty(message.getTopic()));
+        logEntity.setTenantId(nullToEmpty(message.getTenantId()));
+        logEntity.setBusinessKey(nullToEmpty(message.getBusinessKey()));
+        logEntity.setHeaders(message.getHeaders() != null ? message.getHeaders() : Map.of());
+        logEntity.setPayload(message.getPayload() != null
+                ? Base64.getEncoder().encodeToString(message.getPayload())
                 : "");
         this.messageLogRepository.save(logEntity);
 
@@ -83,7 +84,7 @@ public class RetryMessageStoreImpl implements RetryMessageStore {
         retryEntity.setLogId(logEntity.getId());
         retryEntity.setOffset(record.getOffset());
         retryEntity.setAttempts(0);
-        retryEntity.setBusinessKey(nullToEmpty(record.getBusinessKey()));
+        retryEntity.setBusinessKey(nullToEmpty(message.getBusinessKey()));
         // 同 key 顺序不变式: 新条目的可重试时间不早于同 key 更老条目,
         // 避免老条目退避期间新条目抢先重试破坏 key 内 offset 顺序
         var now = LocalDateTime.now();
@@ -92,7 +93,7 @@ public class RetryMessageStoreImpl implements RetryMessageStore {
         retryEntity.setRetryAt(heldUntil != null && heldUntil.isAfter(now) ? heldUntil : now);
         this.retryMessageRepository.save(retryEntity);
 
-        log.info("[{}] saved retry message, id={}, businessKey={}", consumer, retryEntity.getId(), record.getBusinessKey());
+        log.info("[{}] saved retry message, id={}, businessKey={}", consumer, retryEntity.getId(), message.getBusinessKey());
     }
 
     @Override

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import ravenworks.magpie.common.util.CircuitBreaker;
 import ravenworks.magpie.engine.api.sink.SinkStatus;
 import ravenworks.magpie.engine.api.stream.ConsumerRecord;
+import ravenworks.magpie.engine.api.stream.MessageRecord;
 
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
@@ -57,14 +58,15 @@ class HttpSinkHandlerTest {
     void buildCloudEventMapsAllFields() {
         var record = new ConsumerRecord()
                 .setOffset(42L)
-                .setId("id-1")
-                .setType("t.order.created")
-                .setTopic("orders")
-                .setEventTime(LocalDateTime.of(2026, 8, 4, 12, 30, 45))
-                .setTenantId("tenant-1")
-                .setBusinessKey("bk-1")
-                .setHeaders(Map.of("h1", "v1"))
-                .setPayload("{\"a\":1}".getBytes(StandardCharsets.UTF_8));
+                .setMessage(new MessageRecord()
+                        .setId("id-1")
+                        .setType("t.order.created")
+                        .setTopic("orders")
+                        .setEventTime(LocalDateTime.of(2026, 8, 4, 12, 30, 45))
+                        .setTenantId("tenant-1")
+                        .setBusinessKey("bk-1")
+                        .setHeaders(Map.of("h1", "v1"))
+                        .setPayload("{\"a\":1}".getBytes(StandardCharsets.UTF_8)));
 
         var event = HttpSinkHandler.buildCloudEvent(record);
         assertEquals("id-1", event.getId());
@@ -83,9 +85,10 @@ class HttpSinkHandlerTest {
     void buildCloudEventOmitsAbsentFields() {
         var record = new ConsumerRecord()
                 .setOffset(7L)
-                .setId("id-2")
-                .setType("t.ping")
-                .setTopic("orders");
+                .setMessage(new MessageRecord()
+                        .setId("id-2")
+                        .setType("t.ping")
+                        .setTopic("orders"));
 
         var event = HttpSinkHandler.buildCloudEvent(record);
         assertEquals("id-2", event.getId());
@@ -101,12 +104,13 @@ class HttpSinkHandlerTest {
     void buildCloudEventOmitsBlankStringsAndEmptyHeaders() {
         var record = new ConsumerRecord()
                 .setOffset(1L)
-                .setId("id-3")
-                .setType("t.ping")
-                .setTopic("orders")
-                .setTenantId(" ")
-                .setBusinessKey("")
-                .setHeaders(Map.of());
+                .setMessage(new MessageRecord()
+                        .setId("id-3")
+                        .setType("t.ping")
+                        .setTopic("orders")
+                        .setTenantId(" ")
+                        .setBusinessKey("")
+                        .setHeaders(Map.of()));
 
         var event = HttpSinkHandler.buildCloudEvent(record);
         assertNull(event.getExtension("xtenantid"));
@@ -129,8 +133,9 @@ class HttpSinkHandlerTest {
             // id 缺失, CloudEvent 构建必失败: 不经 HTTP(attempts=0), 仅本条 FAILURE
             var record = new ConsumerRecord()
                     .setOffset(0)
-                    .setType("t.test")
-                    .setTopic("topic");
+                    .setMessage(new MessageRecord()
+                            .setType("t.test")
+                            .setTopic("topic"));
             var result = handler.handle(record).join();
             assertEquals(SinkStatus.FAILURE, result.getStatus());
             assertEquals(0, result.getAttempts());
@@ -147,9 +152,10 @@ class HttpSinkHandlerTest {
         try {
             var record = new ConsumerRecord()
                     .setOffset(1)
-                    .setId("id-x")
-                    .setType("t.test")
-                    .setTopic("topic");
+                    .setMessage(new MessageRecord()
+                            .setId("id-x")
+                            .setType("t.test")
+                            .setTopic("topic"));
             // IllegalArgumentException 与 IO 错误同属系统性故障: 退避重试直到 maxAttempts
             var result = handler.handle(record).join();
             assertEquals(SinkStatus.FAILURE, result.getStatus());
@@ -165,13 +171,15 @@ class HttpSinkHandlerTest {
         try {
             var poisoned = new ConsumerRecord()
                     .setOffset(0)
-                    .setType("t.test")
-                    .setTopic("topic"); // id 缺失, 序列化失败
+                    .setMessage(new MessageRecord()
+                            .setType("t.test")
+                            .setTopic("topic")); // id 缺失, 序列化失败
             var unreachable = new ConsumerRecord()
                     .setOffset(1)
-                    .setId("id-ok")
-                    .setType("t.test")
-                    .setTopic("topic"); // 端点连不通, 系统性失败
+                    .setMessage(new MessageRecord()
+                            .setId("id-ok")
+                            .setType("t.test")
+                            .setTopic("topic")); // 端点连不通, 系统性失败
             // join 不抛异常: 各条的失败被隔离为各自的 FAILURE, 不连坐整批
             var results = handler.handle(List.of(poisoned, unreachable)).join();
             assertEquals(2, results.size());
