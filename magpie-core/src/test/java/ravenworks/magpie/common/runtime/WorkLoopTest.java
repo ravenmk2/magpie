@@ -110,6 +110,41 @@ class WorkLoopTest {
     }
 
     @Test
+    void startTwiceThrows() {
+        var loop = new WorkLoop("t-start-twice", 50, e -> {
+        });
+        try {
+            loop.start();
+            assertThrows(IllegalStateException.class, loop::start);
+        } finally {
+            loop.shutdown();
+        }
+    }
+
+    @Test
+    void startAfterShutdownThrows() {
+        var loop = new WorkLoop("t-start-after-shutdown", 50, e -> {
+        });
+        loop.shutdown();
+        assertThrows(IllegalStateException.class, loop::start);
+    }
+
+    @Test
+    void handlerErrorTerminatesLoopExceptionally() {
+        var loop = new WorkLoop("t-error", 50, msg -> {
+            if ("fatal".equals(msg)) {
+                throw new AssertionError("fatal");
+            }
+        });
+        loop.start();
+        loop.enqueue("fatal");
+
+        var termination = loop.shutdown();
+        await().atMost(2, TimeUnit.SECONDS).until(() -> loop.getState() == WorkLoopState.TERMINATED);
+        assertTrue(termination.isCompletedExceptionally());
+    }
+
+    @Test
     void queuedMessagesAreDrainedDuringShutdown() throws Exception {
         List<Object> received = new CopyOnWriteArrayList<>();
         var loop = new WorkLoop("t-drain", 5_000, received::add);

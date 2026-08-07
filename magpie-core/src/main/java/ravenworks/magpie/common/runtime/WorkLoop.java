@@ -50,7 +50,9 @@ public class WorkLoop implements Lifecycle {
             this.thread = Thread.ofVirtual()
                     .name(this.name)
                     .start(this::run);
+            return;
         }
+        throw new IllegalStateException("Work loop is not in NEW state: " + this.state.get());
     }
 
     @Override
@@ -85,6 +87,19 @@ public class WorkLoop implements Lifecycle {
     }
 
     private void run() {
+        try {
+            this.doRun();
+        } catch (Throwable e) {
+            log.error("{} - Work loop died", this.name, e);
+            this.termination.completeExceptionally(e);
+        } finally {
+            this.state.set(WorkLoopState.TERMINATED);
+            log.info("{} - Work loop exited", this.name);
+            this.termination.complete(null);
+        }
+    }
+
+    private void doRun() {
         log.info("{} - Work loop started", this.name);
         this.dispatch(WorkLoopSignal.STARTED);
         while (this.state.get() == WorkLoopState.RUNNING) {
@@ -94,6 +109,11 @@ public class WorkLoop implements Lifecycle {
 
         log.info("{} - Work loop shutdown initiated", this.name);
         this.dispatch(WorkLoopSignal.PRE_SHUTDOWN);
+        this.drain();
+        this.dispatch(WorkLoopSignal.TERMINATED);
+    }
+
+    private void drain() {
         while (true) {
             Object msg;
             synchronized (this.queue) {
@@ -107,19 +127,14 @@ public class WorkLoop implements Lifecycle {
             }
             this.dispatch(msg);
         }
-
-        this.dispatch(WorkLoopSignal.TERMINATED);
-        this.state.set(WorkLoopState.TERMINATED);
-        log.info("{} - Work loop exited", this.name);
-        this.termination.complete(null);
     }
 
     private Object poll(int timeout) {
         try {
             Object msg = this.queue.poll(timeout, TimeUnit.MILLISECONDS);
             return msg == null ? WorkLoopSignal.IDLE : msg;
-        } catch (Throwable e) {
-            log.error(e.getMessage(), e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
         return null;
     }
@@ -130,7 +145,7 @@ public class WorkLoop implements Lifecycle {
         }
         try {
             this.handler.accept(msg);
-        } catch (Throwable e) {
+        } catch (Exception e) {
             log.error(e.getMessage(), e);
         }
     }
