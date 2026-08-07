@@ -1,4 +1,4 @@
-package ravenworks.magpie.engine.impl.sink.worker;
+package ravenworks.magpie.engine.impl.sink.deliverer;
 
 import org.junit.jupiter.api.Test;
 import ravenworks.magpie.common.util.CircuitBreaker;
@@ -6,6 +6,7 @@ import ravenworks.magpie.engine.api.retry.RetryRecord;
 import ravenworks.magpie.engine.api.sink.SinkResult;
 import ravenworks.magpie.engine.api.sink.SinkStatus;
 import ravenworks.magpie.engine.api.stream.ConsumerRecord;
+import ravenworks.magpie.engine.impl.sink.worker.SinkWorker;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -17,7 +18,7 @@ import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class KeyOrderedSinkWorkerTest {
+class KeyOrderedDelivererTest {
 
     private static CircuitBreaker closedCircuit() {
         return new CircuitBreaker("t", 100, 1, 1_000);
@@ -28,7 +29,7 @@ class KeyOrderedSinkWorkerTest {
         var consumer = new FakeStreamConsumer();
         var handler = new FakeSinkHandler();
         var store = new InMemoryRetryMessageStore();
-        var worker = new KeyOrderedSinkWorker("k1", consumer, handler, closedCircuit(), store, 100);
+        var worker = new SinkWorker("k1", consumer, handler, closedCircuit(), store, 100, new KeyOrderedDeliverer());
         try {
             consumer.offer(List.of(FakeStreamConsumer.record(0, "a"), FakeStreamConsumer.record(1, "b")));
             worker.start();
@@ -46,7 +47,7 @@ class KeyOrderedSinkWorkerTest {
         var handler = new FakeSinkHandler();
         handler.thenReturn(SinkStatus.FAILURE);
         var store = new InMemoryRetryMessageStore();
-        var worker = new KeyOrderedSinkWorker("k2", consumer, handler, closedCircuit(), store, 100);
+        var worker = new SinkWorker("k2", consumer, handler, closedCircuit(), store, 100, new KeyOrderedDeliverer());
         try {
             // 两批预先投放：第一批失败后 key=a 被阻塞，第二批同 key 消息应直接落库不发送
             consumer.offer(List.of(FakeStreamConsumer.record(0, "a")));
@@ -72,7 +73,7 @@ class KeyOrderedSinkWorkerTest {
         var handler = new FakeSinkHandler();
         handler.thenReturn(SinkStatus.FAILURE);
         var store = new InMemoryRetryMessageStore();
-        var worker = new KeyOrderedSinkWorker("k3", consumer, handler, closedCircuit(), store, 100);
+        var worker = new SinkWorker("k3", consumer, handler, closedCircuit(), store, 100, new KeyOrderedDeliverer());
         try {
             consumer.offer(List.of(FakeStreamConsumer.record(0, "a")));
             worker.start();
@@ -95,7 +96,7 @@ class KeyOrderedSinkWorkerTest {
         var handler = new FakeSinkHandler();
         handler.thenReturn(SinkStatus.FAILURE, SinkStatus.FAILURE, SinkStatus.FAILURE);
         var store = new InMemoryRetryMessageStore();
-        var worker = new KeyOrderedSinkWorker("k4", consumer, handler, closedCircuit(), store, 100);
+        var worker = new SinkWorker("k4", consumer, handler, closedCircuit(), store, 100, new KeyOrderedDeliverer());
         try {
             consumer.offer(List.of(FakeStreamConsumer.record(0, "a")));
             consumer.offer(List.of(FakeStreamConsumer.record(9, "a")));
@@ -116,7 +117,7 @@ class KeyOrderedSinkWorkerTest {
         var handler = new FakeSinkHandler();
         var store = new InMemoryRetryMessageStore();
         store.save("k5", FakeStreamConsumer.record(0, "a"));
-        var worker = new KeyOrderedSinkWorker("k5", consumer, handler, closedCircuit(), store, 100);
+        var worker = new SinkWorker("k5", consumer, handler, closedCircuit(), store, 100, new KeyOrderedDeliverer());
         try {
             worker.start();
 
@@ -132,7 +133,7 @@ class KeyOrderedSinkWorkerTest {
         var consumer = new FakeStreamConsumer();
         var handler = new FakeSinkHandler();
         var store = new InMemoryRetryMessageStore();
-        var worker = new KeyOrderedSinkWorker("k6", consumer, handler, closedCircuit(), store, 100);
+        var worker = new SinkWorker("k6", consumer, handler, closedCircuit(), store, 100, new KeyOrderedDeliverer());
         try {
             consumer.offer(List.of(
                     FakeStreamConsumer.record(0, "a"),
@@ -163,7 +164,7 @@ class KeyOrderedSinkWorkerTest {
                 .setTopic("topic")
                 .setBusinessKey("a")
                 .setRetryAt(LocalDateTime.now().plusHours(1)));
-        var worker = new KeyOrderedSinkWorker("k7", consumer, handler, closedCircuit(), store, 100);
+        var worker = new SinkWorker("k7", consumer, handler, closedCircuit(), store, 100, new KeyOrderedDeliverer());
         try {
             worker.start();
 
@@ -188,7 +189,7 @@ class KeyOrderedSinkWorkerTest {
         var store = new InMemoryRetryMessageStore();
         store.save("k8", FakeStreamConsumer.record(0, "a"));
         store.records().get(0).setRetryAt(LocalDateTime.now().plusHours(1)); // 模拟 offset 0 退避中
-        var worker = new KeyOrderedSinkWorker("k8", consumer, handler, closedCircuit(), store, 100);
+        var worker = new SinkWorker("k8", consumer, handler, closedCircuit(), store, 100, new KeyOrderedDeliverer());
         try {
             worker.start();
             consumer.offer(List.of(FakeStreamConsumer.record(1, "a"))); // 同 key: 分流后 retryAt 被推到 offset 0 之后
@@ -216,7 +217,7 @@ class KeyOrderedSinkWorkerTest {
         var handler = new FakeSinkHandler();
         handler.thenReturn(SinkStatus.FAILURE); // 仅第一次投递失败
         var store = new InMemoryRetryMessageStore();
-        var worker = new KeyOrderedSinkWorker("k9", consumer, handler, closedCircuit(), store, 100);
+        var worker = new SinkWorker("k9", consumer, handler, closedCircuit(), store, 100, new KeyOrderedDeliverer());
         try {
             consumer.offer(List.of(FakeStreamConsumer.record(0, null), FakeStreamConsumer.record(1, null)));
             worker.start();
@@ -251,7 +252,7 @@ class KeyOrderedSinkWorkerTest {
         };
         handler.thenReturn(SinkStatus.FAILURE); // offset 5 投递失败
 
-        var worker = new KeyOrderedSinkWorker("k11", consumer, handler, closedCircuit(), store, 100);
+        var worker = new SinkWorker("k11", consumer, handler, closedCircuit(), store, 100, new KeyOrderedDeliverer());
         consumer.offer(List.of(FakeStreamConsumer.record(5, "a"), FakeStreamConsumer.record(6, "b")));
         worker.start();
 
@@ -279,7 +280,7 @@ class KeyOrderedSinkWorkerTest {
         handler.thenReturn(SinkStatus.FAILURE);
         var store = new InMemoryRetryMessageStore();
         store.saveFailures.set(2); // 前两次落库抛异常, saveWithRetry 每秒重试
-        var worker = new KeyOrderedSinkWorker("k10", consumer, handler, closedCircuit(), store, 100);
+        var worker = new SinkWorker("k10", consumer, handler, closedCircuit(), store, 100, new KeyOrderedDeliverer());
         try {
             consumer.offer(List.of(FakeStreamConsumer.record(0, "a")));
             worker.start();

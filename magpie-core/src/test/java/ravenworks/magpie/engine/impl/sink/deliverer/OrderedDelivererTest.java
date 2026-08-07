@@ -1,10 +1,11 @@
-package ravenworks.magpie.engine.impl.sink.worker;
+package ravenworks.magpie.engine.impl.sink.deliverer;
 
 import org.junit.jupiter.api.Test;
 import ravenworks.magpie.common.util.CircuitBreaker;
 import ravenworks.magpie.engine.api.sink.SinkResult;
 import ravenworks.magpie.engine.api.sink.SinkStatus;
 import ravenworks.magpie.engine.api.stream.ConsumerRecord;
+import ravenworks.magpie.engine.impl.sink.worker.SinkWorker;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -15,7 +16,7 @@ import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class OrderedSinkWorkerTest {
+class OrderedDelivererTest {
 
     private static CircuitBreaker closedCircuit() {
         return new CircuitBreaker("t", 100, 1, 1_000);
@@ -25,7 +26,7 @@ class OrderedSinkWorkerTest {
     void successfulBatchAdvancesOffsetAndCommits() throws Exception {
         var consumer = new FakeStreamConsumer();
         var handler = new FakeSinkHandler();
-        var worker = new OrderedSinkWorker("w1", consumer, handler, closedCircuit(), 100);
+        var worker = new SinkWorker("w1", consumer, handler, closedCircuit(), null, 100, new OrderedDeliverer());
         try {
             consumer.offer(List.of(FakeStreamConsumer.record(0, "a"), FakeStreamConsumer.record(1, "b")));
             worker.start();
@@ -44,7 +45,7 @@ class OrderedSinkWorkerTest {
         var consumer = new FakeStreamConsumer();
         var handler = new FakeSinkHandler();
         handler.thenReturn(SinkStatus.BACKOFF);
-        var worker = new OrderedSinkWorker("w2", consumer, handler, closedCircuit(), 100);
+        var worker = new SinkWorker("w2", consumer, handler, closedCircuit(), null, 100, new OrderedDeliverer());
         try {
             consumer.offer(List.of(FakeStreamConsumer.record(0, "a")));
             worker.start();
@@ -61,7 +62,7 @@ class OrderedSinkWorkerTest {
         var consumer = new FakeStreamConsumer();
         var handler = new FakeSinkHandler();
         handler.thenReturn(SinkStatus.FAILURE);
-        var worker = new OrderedSinkWorker("w3", consumer, handler, closedCircuit(), 100);
+        var worker = new SinkWorker("w3", consumer, handler, closedCircuit(), null, 100, new OrderedDeliverer());
         try {
             consumer.offer(List.of(FakeStreamConsumer.record(0, "a"), FakeStreamConsumer.record(1, "b")));
             worker.start();
@@ -84,7 +85,7 @@ class OrderedSinkWorkerTest {
         var handler = new FakeSinkHandler();
         var circuitBreaker = new CircuitBreaker("t", 1, 1, 10_000);
         circuitBreaker.recordFailure();
-        var worker = new OrderedSinkWorker("w4", consumer, handler, circuitBreaker, 100);
+        var worker = new SinkWorker("w4", consumer, handler, circuitBreaker, null, 100, new OrderedDeliverer());
         try {
             consumer.offer(List.of(FakeStreamConsumer.record(0, "a")));
             worker.start();
@@ -110,7 +111,7 @@ class OrderedSinkWorkerTest {
                 return super.handle(record);
             }
         };
-        var worker = new OrderedSinkWorker("w5", consumer, handler, closedCircuit(), 100);
+        var worker = new SinkWorker("w5", consumer, handler, closedCircuit(), null, 100, new OrderedDeliverer());
         try {
             consumer.offer(List.of(FakeStreamConsumer.record(0, "a"), FakeStreamConsumer.record(1, "b")));
             worker.start();
@@ -120,6 +121,27 @@ class OrderedSinkWorkerTest {
             assertTrue(thrown.get());
             assertEquals(0, handler.handledRecords.get(0).getOffset());
             assertEquals(1, handler.handledRecords.get(1).getOffset());
+        } finally {
+            worker.shutdown().get(2, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
+    void redeliveredOffsetsUpToLastCommitAreSkipped() throws Exception {
+        var consumer = new FakeStreamConsumer();
+        var handler = new FakeSinkHandler();
+        var worker = new SinkWorker("w6", consumer, handler, closedCircuit(), null, 100, new OrderedDeliverer());
+        try {
+            consumer.offer(List.of(FakeStreamConsumer.record(0, "a"), FakeStreamConsumer.record(1, "b")));
+            worker.start();
+            await().atMost(2, TimeUnit.SECONDS).until(() -> consumer.lastCommit() == 1);
+
+            // 重投包含已处理 offset（at-least-once 重启场景）：offset <= 已提交水位的记录被跳过
+            consumer.offer(List.of(FakeStreamConsumer.record(1, "b"), FakeStreamConsumer.record(2, "c")));
+            await().atMost(2, TimeUnit.SECONDS).until(() -> consumer.lastCommit() == 2);
+            assertEquals(1, handler.countByOffset(0));
+            assertEquals(1, handler.countByOffset(1));
+            assertEquals(1, handler.countByOffset(2));
         } finally {
             worker.shutdown().get(2, TimeUnit.SECONDS);
         }

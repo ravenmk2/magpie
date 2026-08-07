@@ -1,4 +1,4 @@
-package ravenworks.magpie.engine.impl.sink.worker;
+package ravenworks.magpie.engine.impl.sink.deliverer;
 
 import ravenworks.magpie.engine.api.sink.SinkHandler;
 import ravenworks.magpie.engine.api.sink.SinkResult;

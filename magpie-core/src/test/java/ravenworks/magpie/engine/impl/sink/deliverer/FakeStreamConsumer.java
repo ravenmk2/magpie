@@ -1,4 +1,4 @@
-package ravenworks.magpie.engine.impl.sink.worker;
+package ravenworks.magpie.engine.impl.sink.deliverer;
 
 import ravenworks.magpie.engine.api.stream.ConsumerRecord;
 import ravenworks.magpie.engine.api.stream.StreamConsumer;

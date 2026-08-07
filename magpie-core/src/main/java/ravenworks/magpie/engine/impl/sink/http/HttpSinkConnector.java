@@ -5,9 +5,10 @@ import lombok.extern.slf4j.Slf4j;
 import ravenworks.magpie.common.util.CircuitBreaker;
 import ravenworks.magpie.engine.api.retry.RetryMessageStore;
 import ravenworks.magpie.engine.api.sink.SinkConnector;
-import ravenworks.magpie.engine.impl.sink.worker.BestEffortSinkWorker;
-import ravenworks.magpie.engine.impl.sink.worker.KeyOrderedSinkWorker;
-import ravenworks.magpie.engine.impl.sink.worker.OrderedSinkWorker;
+import ravenworks.magpie.engine.impl.sink.deliverer.BestEffortDeliverer;
+import ravenworks.magpie.engine.impl.sink.deliverer.Deliverer;
+import ravenworks.magpie.engine.impl.sink.deliverer.KeyOrderedDeliverer;
+import ravenworks.magpie.engine.impl.sink.deliverer.OrderedDeliverer;
 import ravenworks.magpie.engine.impl.sink.worker.SinkWorker;
 import ravenworks.magpie.engine.api.stream.StreamConsumer;
 import ravenworks.magpie.engine.api.stream.StreamDefinition;
@@ -90,38 +91,21 @@ public class HttpSinkConnector implements SinkConnector {
     }
 
     private SinkWorker createWorker(String name, StreamConsumer consumer) {
-        return switch (this.config.resolveDeliveryMode()) {
-            case ORDERED -> createOrderedWorker(name, consumer);
-            case KEY_ORDERED -> createKeyOrderedWorker(name, consumer);
-            case BEST_EFFORT -> createBestEffortWorker(name, consumer);
+        var workerName = name + "-" + consumer.partition();
+        var cb = createCircuitBreaker(workerName);
+        int maxAttempts = switch (this.config.resolveDeliveryMode()) {
+            case ORDERED -> -1;
+            default -> this.config.getInplaceAttempts();
         };
-    }
-
-    private OrderedSinkWorker createOrderedWorker(String name, StreamConsumer consumer) {
-        var workerName = name + "-" + consumer.partition();
-        var cb = createCircuitBreaker(workerName);
         var handler = new HttpSinkHandler(
-                workerName, this.httpClient, cb, createHandlerConfig(-1));
-        return new OrderedSinkWorker(
-                workerName, consumer, handler, cb, this.config.getBatchSize());
-    }
-
-    private KeyOrderedSinkWorker createKeyOrderedWorker(String name, StreamConsumer consumer) {
-        var workerName = name + "-" + consumer.partition();
-        var cb = createCircuitBreaker(workerName);
-        var handler = new HttpSinkHandler(
-                workerName, this.httpClient, cb, createHandlerConfig(this.config.getInplaceAttempts()));
-        return new KeyOrderedSinkWorker(
-                workerName, consumer, handler, cb, this.retryStore, this.config.getBatchSize());
-    }
-
-    private BestEffortSinkWorker createBestEffortWorker(String name, StreamConsumer consumer) {
-        var workerName = name + "-" + consumer.partition();
-        var cb = createCircuitBreaker(workerName);
-        var handler = new HttpSinkHandler(
-                workerName, this.httpClient, cb, createHandlerConfig(this.config.getInplaceAttempts()));
-        return new BestEffortSinkWorker(
-                workerName, consumer, handler, cb, this.retryStore, this.config.getBatchSize());
+                workerName, this.httpClient, cb, createHandlerConfig(maxAttempts));
+        Deliverer deliverer = switch (this.config.resolveDeliveryMode()) {
+            case ORDERED -> new OrderedDeliverer();
+            case KEY_ORDERED -> new KeyOrderedDeliverer();
+            case BEST_EFFORT -> new BestEffortDeliverer();
+        };
+        return new SinkWorker(workerName, consumer, handler, cb, this.retryStore,
+                this.config.getBatchSize(), deliverer);
     }
 
     private CircuitBreaker createCircuitBreaker(String workerName) {
