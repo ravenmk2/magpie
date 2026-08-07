@@ -2,57 +2,54 @@ package ravenworks.magpie.server.config;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.context.SmartLifecycle;
-import ravenworks.magpie.engine.api.lock.LeaderLock;
-import ravenworks.magpie.engine.impl.runtime.Coordinator;
-import ravenworks.magpie.engine.api.sink.SinkConnector;
+import ravenworks.magpie.engine.api.election.LeaderElection;
 import ravenworks.magpie.engine.api.sink.SinkFactory;
-import ravenworks.magpie.engine.api.sink.TargetDefinition;
 import ravenworks.magpie.engine.api.sink.TargetRegistry;
-import ravenworks.magpie.engine.api.source.SourceConnector;
-import ravenworks.magpie.engine.api.source.SourceDefinition;
 import ravenworks.magpie.engine.api.source.SourceFactory;
 import ravenworks.magpie.engine.api.source.SourceRegistry;
-import ravenworks.magpie.engine.api.stream.MessageRecord;
-import ravenworks.magpie.engine.api.stream.SendResult;
-import ravenworks.magpie.engine.api.stream.StreamConsumer;
-import ravenworks.magpie.engine.api.stream.StreamDefinition;
-import ravenworks.magpie.engine.api.stream.StreamProducer;
-import ravenworks.magpie.engine.api.stream.StreamProvider;
-import ravenworks.magpie.engine.api.stream.StreamRegistry;
+import ravenworks.magpie.engine.api.stream.*;
+import ravenworks.magpie.engine.impl.runtime.Coordinator;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
+
 
 class EngineConfigurationTest {
 
     /**
      * Spring 只停 isRunning() 为 true 的 SmartLifecycle：
-     * 该 bean 必须如实上报运行状态，否则优雅停机（释放 Leader 锁、停连接器）不会发生。
+     * 该 bean 必须如实上报运行状态，否则优雅停机（停选举放锁、停连接器）不会发生。
      */
     @Test
     void lifecycleTracksRunningStateAndStopsCoordinator() {
-        var releaseCount = new AtomicInteger();
-        LeaderLock leaderLock = new LeaderLock() {
+        var electionShutdownCount = new AtomicInteger();
+        LeaderElection leaderElection = new LeaderElection() {
+
             @Override
-            public void init() {
+            public boolean isLeader() {
+                return false;
             }
 
             @Override
-            public PulseResult pulse() {
-                return PulseResult.FAILED;
+            public void addListener(Consumer<Event> listener) {
             }
 
             @Override
-            public void release() {
-                releaseCount.incrementAndGet();
+            public void start() {
+            }
+
+            @Override
+            public CompletableFuture<Void> shutdown() {
+                electionShutdownCount.incrementAndGet();
+                return CompletableFuture.completedFuture(null);
             }
         };
         StreamRegistry streamRegistry = new StreamRegistry() {
+
             @Override
             public List<StreamDefinition> getStreams() {
                 return List.of();
@@ -64,6 +61,7 @@ class EngineConfigurationTest {
             }
         };
         StreamProvider streamProvider = new StreamProvider() {
+
             @Override
             public void create(StreamDefinition definition) {
             }
@@ -91,6 +89,7 @@ class EngineConfigurationTest {
             throw new UnsupportedOperationException();
         };
         StreamProducer sourceProducer = new StreamProducer() {
+
             @Override
             public CompletableFuture<SendResult> send(MessageRecord record) {
                 throw new UnsupportedOperationException();
@@ -101,7 +100,7 @@ class EngineConfigurationTest {
             }
         };
 
-        var coordinator = new Coordinator(leaderLock, streamRegistry, streamProvider,
+        var coordinator = new Coordinator(leaderElection, streamRegistry, streamProvider,
                 sourceRegistry, sourceFactory, targetRegistry, sinkFactory, sourceProducer, 10);
         SmartLifecycle lifecycle = EngineConfiguration.coordinatorLifecycle(coordinator);
 
@@ -112,7 +111,7 @@ class EngineConfigurationTest {
 
         lifecycle.stop();
         assertFalse(lifecycle.isRunning(), "not running after stop");
-        assertEquals(1, releaseCount.get(), "stop must shut down the coordinator and release the leader lock");
+        assertEquals(1, electionShutdownCount.get(), "stop must shut down the coordinator and the leader election");
     }
 
 }

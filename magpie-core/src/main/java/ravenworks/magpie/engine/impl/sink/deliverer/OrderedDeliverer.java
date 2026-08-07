@@ -21,13 +21,17 @@ import java.util.concurrent.locks.LockSupport;
 @Slf4j
 public class OrderedDeliverer implements Deliverer {
 
-    /** 原地重试与熔断等待的停顿节奏 */
+    /**
+     * 原地重试与熔断等待的停顿节奏
+     */
     private static final long RETRY_PAUSE_NANOS = 200_000_000L;
 
     private final String name;
     private final SinkHandler handler;
     private final CircuitBreaker circuitBreaker;
-    /** 停机标志：由 onShutdown 从停机线程写入，原地重试循环据此退出 */
+    /**
+     * 停机标志：由 onShutdown 从停机线程写入，原地重试循环据此退出
+     */
     private volatile boolean shutdownRequested;
 
     public OrderedDeliverer(@NonNull String name,

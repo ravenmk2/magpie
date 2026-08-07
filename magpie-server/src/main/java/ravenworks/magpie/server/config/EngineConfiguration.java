@@ -1,32 +1,43 @@
 package ravenworks.magpie.server.config;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import ravenworks.magpie.domain.repository.*;
-import ravenworks.magpie.engine.api.lock.LeaderLock;
+import ravenworks.magpie.engine.api.election.LeaderElection;
 import ravenworks.magpie.engine.api.retry.RetryMessageStore;
-import ravenworks.magpie.engine.api.sink.*;
-import ravenworks.magpie.engine.api.source.*;
+import ravenworks.magpie.engine.api.sink.SinkFactory;
+import ravenworks.magpie.engine.api.sink.SinkProvider;
+import ravenworks.magpie.engine.api.sink.TargetRegistry;
+import ravenworks.magpie.engine.api.source.SourceFactory;
+import ravenworks.magpie.engine.api.source.SourceProvider;
+import ravenworks.magpie.engine.api.source.SourceRegistry;
 import ravenworks.magpie.engine.api.source.http.HttpSourceRouter;
-import ravenworks.magpie.engine.api.stream.*;
-import ravenworks.magpie.engine.impl.lock.LeaderLockImpl;
+import ravenworks.magpie.engine.api.stream.OffsetTracker;
+import ravenworks.magpie.engine.api.stream.StreamProvider;
+import ravenworks.magpie.engine.api.stream.StreamRegistry;
+import ravenworks.magpie.engine.impl.election.LeaderElectionImpl;
 import ravenworks.magpie.engine.impl.retry.RetryMessageStoreImpl;
 import ravenworks.magpie.engine.impl.runtime.Coordinator;
-import ravenworks.magpie.engine.impl.sink.*;
+import ravenworks.magpie.engine.impl.sink.SinkFactoryImpl;
+import ravenworks.magpie.engine.impl.sink.TargetRegistryImpl;
 import ravenworks.magpie.engine.impl.sink.http.HttpSinkProvider;
 import ravenworks.magpie.engine.impl.sink.print.PrintSinkProvider;
-import ravenworks.magpie.engine.impl.source.*;
+import ravenworks.magpie.engine.impl.source.SourceFactoryImpl;
+import ravenworks.magpie.engine.impl.source.SourceRegistryImpl;
 import ravenworks.magpie.engine.impl.source.http.HttpSourceProvider;
 import ravenworks.magpie.engine.impl.source.http.HttpSourceRouterImpl;
 import ravenworks.magpie.engine.impl.source.mysql.MySqlPollSourceProvider;
 import ravenworks.magpie.engine.impl.source.sample.SampleSourceProvider;
-import ravenworks.magpie.engine.impl.stream.*;
+import ravenworks.magpie.engine.impl.stream.OffsetTrackerImpl;
+import ravenworks.magpie.engine.impl.stream.RoutingStreamProducer;
+import ravenworks.magpie.engine.impl.stream.StreamRegistryImpl;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 
 @Slf4j
@@ -34,8 +45,8 @@ import ravenworks.magpie.engine.impl.stream.*;
 public class EngineConfiguration {
 
     @Bean
-    public static LeaderLock leaderLock(@NonNull LeaderLockRepository lockRepository) {
-        return new LeaderLockImpl(lockRepository);
+    public static LeaderElection leaderElection(@NonNull LeaderLockRepository lockRepository) {
+        return new LeaderElectionImpl(lockRepository);
     }
 
     @Bean
@@ -90,7 +101,7 @@ public class EngineConfiguration {
     }
 
     @Bean
-    public static Coordinator coordinator(@NonNull LeaderLock leaderLock,
+    public static Coordinator coordinator(@NonNull LeaderElection leaderElection,
                                           @NonNull StreamRegistry streamRegistry,
                                           @NonNull StreamProvider streamProvider,
                                           @NonNull SourceRegistry sourceRegistry,
@@ -98,7 +109,7 @@ public class EngineConfiguration {
                                           @NonNull TargetRegistry targetRegistry,
                                           @NonNull SinkFactory sinkFactory,
                                           @NonNull RoutingStreamProducer streamProducer) {
-        return new Coordinator(leaderLock, streamRegistry, streamProvider,
+        return new Coordinator(leaderElection, streamRegistry, streamProvider,
                 sourceRegistry, sourceFactory, targetRegistry, sinkFactory, streamProducer);
     }
 

@@ -1,7 +1,7 @@
 package ravenworks.magpie.engine.impl.runtime;
 
 import org.junit.jupiter.api.Test;
-import ravenworks.magpie.engine.api.lock.LeaderLock;
+import ravenworks.magpie.engine.api.election.LeaderElection;
 import ravenworks.magpie.engine.api.sink.SinkConnector;
 import ravenworks.magpie.engine.api.sink.TargetDefinition;
 import ravenworks.magpie.engine.api.sink.TargetRegistry;
@@ -12,9 +12,13 @@ import ravenworks.magpie.engine.api.stream.*;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.*;
@@ -22,32 +26,41 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class CoordinatorTest {
 
-    static class FakeLeaderLock implements LeaderLock {
+    static class FakeLeaderElection implements LeaderElection {
 
-        private final Queue<PulseResult> script = new ConcurrentLinkedQueue<>();
-        final AtomicInteger initCount = new AtomicInteger();
-        final AtomicInteger releaseCount = new AtomicInteger();
-        final AtomicInteger pulseCount = new AtomicInteger();
+        private final List<Consumer<Event>> listeners = new CopyOnWriteArrayList<>();
+        private volatile boolean leader;
+        final AtomicInteger startCount = new AtomicInteger();
+        final AtomicInteger shutdownCount = new AtomicInteger();
 
-        void thenReturn(PulseResult... results) {
-            this.script.addAll(List.of(results));
+        void setLeader(boolean value) {
+            if (this.leader == value) {
+                return;
+            }
+            this.leader = value;
+            var event = value ? Event.ACQUIRED : Event.LOST;
+            this.listeners.forEach(l -> l.accept(event));
         }
 
         @Override
-        public void init() {
-            this.initCount.incrementAndGet();
+        public boolean isLeader() {
+            return this.leader;
         }
 
         @Override
-        public PulseResult pulse() {
-            this.pulseCount.incrementAndGet();
-            var result = this.script.poll();
-            return result != null ? result : PulseResult.FAILED;
+        public void addListener(Consumer<Event> listener) {
+            this.listeners.add(listener);
         }
 
         @Override
-        public void release() {
-            this.releaseCount.incrementAndGet();
+        public void start() {
+            this.startCount.incrementAndGet();
+        }
+
+        @Override
+        public CompletableFuture<Void> shutdown() {
+            this.shutdownCount.incrementAndGet();
+            return CompletableFuture.completedFuture(null);
         }
 
     }
@@ -135,8 +148,13 @@ class CoordinatorTest {
 
     static class Harness {
 
-        final FakeLeaderLock lock = new FakeLeaderLock();
+        final FakeLeaderElection election = new FakeLeaderElection();
         final FakeStreamProvider streamProvider = new FakeStreamProvider();
+        final AtomicReference<List<SourceDefinition>> sourceDefs = new AtomicReference<>(List.of(
+                source("src-on", true), source("src-off", false)));
+        final AtomicReference<List<TargetDefinition>> targetDefs = new AtomicReference<>(List.of(
+                target("snk-on", true), target("snk-off", false)));
+        final AtomicInteger sourceCreateFailures = new AtomicInteger();
         final Map<String, FakeConnector> sources = new ConcurrentHashMap<>();
         final Map<String, FakeConnector> sinks = new ConcurrentHashMap<>();
         final List<FakeConnector> allSources = new CopyOnWriteArrayList<>();
@@ -156,14 +174,15 @@ class CoordinatorTest {
                     return null;
                 }
             };
-            SourceRegistry sourceRegistry = () -> List.of(
-                    source("src-on", true), source("src-off", false));
-            TargetRegistry targetRegistry = () -> List.of(
-                    target("snk-on", true), target("snk-off", false));
+            SourceRegistry sourceRegistry = () -> this.sourceDefs.get();
+            TargetRegistry targetRegistry = () -> this.targetDefs.get();
             this.coordinator = new Coordinator(
-                    this.lock, streamRegistry, this.streamProvider,
+                    this.election, streamRegistry, this.streamProvider,
                     sourceRegistry,
                     (producer, definition) -> {
+                        if (this.sourceCreateFailures.getAndUpdate(n -> n > 0 ? n - 1 : 0) > 0) {
+                            throw new RuntimeException("source creation failed (simulated)");
+                        }
                         var connector = new FakeConnector(definition.getName(), definition.getType());
                         this.sources.put(definition.getName(), connector);
                         this.allSources.add(connector);
@@ -181,11 +200,15 @@ class CoordinatorTest {
         }
 
         private static SourceDefinition source(String name, boolean enabled) {
+            return source(name, enabled, Map.of());
+        }
+
+        private static SourceDefinition source(String name, boolean enabled, Map<String, Object> properties) {
             var definition = new SourceDefinition();
             definition.setName(name);
             definition.setType("sample");
             definition.setEnabled(enabled);
-            definition.setProperties(Map.of());
+            definition.setProperties(properties);
             return definition;
         }
 
@@ -209,107 +232,133 @@ class CoordinatorTest {
     }
 
     @Test
-    void leaderAcquiredInitializesStreamsAndStartsConnectors() {
+    void leaderStartsStreamsAndConnectors() {
         var h = new Harness();
-        h.lock.thenReturn(LeaderLock.PulseResult.ACQUIRED);
         try {
             h.coordinator.start();
+            h.election.setLeader(true);
             h.awaitStarted();
 
             assertFalse(h.sources.containsKey("src-off"));
             assertFalse(h.sinks.containsKey("snk-off"));
-            assertEquals(1, h.lock.initCount.get());
+            assertEquals(1, h.election.startCount.get());
         } finally {
             h.coordinator.shutdown();
         }
     }
 
     @Test
-    void leaderRenewedDoesNotRestartConnectors() throws Exception {
+    void steadyLeadershipDoesNotRestartConnectors() throws Exception {
         var h = new Harness();
-        h.lock.thenReturn(LeaderLock.PulseResult.ACQUIRED,
-                LeaderLock.PulseResult.RENEWED, LeaderLock.PulseResult.RENEWED, LeaderLock.PulseResult.RENEWED);
         try {
             h.coordinator.start();
+            h.election.setLeader(true);
             h.awaitStarted();
-            await().atMost(2, TimeUnit.SECONDS).until(() -> h.lock.pulseCount.get() >= 4);
-            Thread.sleep(100);
+            // 经历多个 resync 节拍后：reconcile 幂等，连接器不重启
+            Thread.sleep(200);
 
             assertEquals(1, h.sources.get("src-on").startCount.get());
             assertEquals(1, h.sinks.get("snk-on").startCount.get());
+            assertEquals(0, h.sources.get("src-on").shutdownCount.get());
+            assertEquals(0, h.sinks.get("snk-on").shutdownCount.get());
         } finally {
             h.coordinator.shutdown();
         }
     }
 
     @Test
-    void leaderReacquiredRestartsConnectors() {
+    void leadershipLostStopsAndReacquiredRestartsConnectors() {
         var h = new Harness();
-        h.lock.thenReturn(LeaderLock.PulseResult.ACQUIRED, LeaderLock.PulseResult.LOST,
-                LeaderLock.PulseResult.ACQUIRED);
         try {
             h.coordinator.start();
+            h.election.setLeader(true);
+            h.awaitStarted();
+
+            h.election.setLeader(false);
+            await().atMost(2, TimeUnit.SECONDS).until(() ->
+                    h.sources.get("src-on").shutdownCount.get() == 1
+                            && h.sinks.get("snk-on").shutdownCount.get() == 1);
+
+            h.election.setLeader(true);
             await().atMost(2, TimeUnit.SECONDS).until(() ->
                     h.allSources.size() == 2 && h.allSources.get(1).startCount.get() == 1
                             && h.allSinks.size() == 2 && h.allSinks.get(1).startCount.get() == 1);
-
-            assertEquals(1, h.allSources.get(0).shutdownCount.get());
-            assertEquals(1, h.allSinks.get(0).shutdownCount.get());
         } finally {
             h.coordinator.shutdown();
         }
     }
 
     @Test
-    void leaderRenewedRestartsConnectorsAfterStartupFailure() throws Exception {
+    void streamFailureIsRetriedWithoutBlockingConnectors() {
         var h = new Harness();
         h.streamProvider.createFailures.set(1);
-        h.lock.thenReturn(LeaderLock.PulseResult.ACQUIRED, LeaderLock.PulseResult.RENEWED,
-                LeaderLock.PulseResult.RENEWED, LeaderLock.PulseResult.RENEWED);
         try {
             h.coordinator.start();
-            await().atMost(2, TimeUnit.SECONDS).until(() ->
-                    !h.allSources.isEmpty() && h.allSources.get(0).startCount.get() == 1
-                            && !h.allSinks.isEmpty() && h.allSinks.get(0).startCount.get() == 1);
-            await().atMost(2, TimeUnit.SECONDS).until(() -> h.lock.pulseCount.get() >= 4);
-            Thread.sleep(100);
+            h.election.setLeader(true);
+            // Stream 创建失败不再回滚连接器：连接器照常启动
+            h.awaitStarted();
+            // Stream 在下轮 reconcile 补齐
+            await().atMost(2, TimeUnit.SECONDS).until(() -> h.streamProvider.created.contains("s1"));
+            assertEquals(1, h.streamProvider.created.size());
+        } finally {
+            h.coordinator.shutdown();
+        }
+    }
 
-            // 首次 ACQUIRED 启动失败后由 RENEWED 补齐，且后续 RENEWED 不再重复启动
+    @Test
+    void failingSourceIsRetriedWithoutBlockingSinks() {
+        var h = new Harness();
+        h.sourceCreateFailures.set(1);
+        try {
+            h.coordinator.start();
+            h.election.setLeader(true);
+            // Source 首轮启动失败不影响 Sink；下轮 reconcile 重试成功
+            await().atMost(2, TimeUnit.SECONDS).until(() ->
+                    h.sinks.get("snk-on") != null && h.sinks.get("snk-on").startCount.get() == 1);
+            await().atMost(2, TimeUnit.SECONDS).until(() ->
+                    h.sources.get("src-on") != null && h.sources.get("src-on").startCount.get() == 1);
             assertEquals(1, h.allSources.size());
-            assertEquals(1, h.allSinks.size());
-            assertEquals(1, h.allSources.get(0).startCount.get());
-            assertEquals(1, h.allSinks.get(0).startCount.get());
         } finally {
             h.coordinator.shutdown();
         }
     }
 
     @Test
-    void leaderLostStopsConnectors() {
+    void configChangeRecreatesConnector() {
         var h = new Harness();
-        h.lock.thenReturn(LeaderLock.PulseResult.ACQUIRED, LeaderLock.PulseResult.LOST);
         try {
             h.coordinator.start();
+            h.election.setLeader(true);
+            h.awaitStarted();
+
+            // 属性变更：连接器重建（旧实例关停、新实例启动）
+            h.sourceDefs.set(List.of(
+                    Harness.source("src-on", true, Map.of("k", "v")), Harness.source("src-off", false)));
             await().atMost(2, TimeUnit.SECONDS).until(() ->
-                    h.sources.get("src-on") != null && h.sources.get("src-on").shutdownCount.get() == 1
-                            && h.sinks.get("snk-on") != null && h.sinks.get("snk-on").shutdownCount.get() == 1);
+                    h.allSources.size() == 2 && h.allSources.get(0).shutdownCount.get() == 1
+                            && h.allSources.get(1).startCount.get() == 1);
+
+            // 禁用：连接器停止且不重建
+            h.targetDefs.set(List.of(Harness.target("snk-on", false), Harness.target("snk-off", false)));
+            await().atMost(2, TimeUnit.SECONDS).until(() -> h.sinks.get("snk-on").shutdownCount.get() == 1);
+            assertEquals(1, h.allSinks.size());
         } finally {
             h.coordinator.shutdown();
         }
     }
 
     @Test
-    void shutdownStopsConnectorsAndReleasesLock() throws Exception {
+    void shutdownStopsConnectorsAndElection() throws Exception {
         var h = new Harness();
-        h.lock.thenReturn(LeaderLock.PulseResult.ACQUIRED, LeaderLock.PulseResult.RENEWED);
         h.coordinator.start();
+        h.election.setLeader(true);
         h.awaitStarted();
 
         h.coordinator.shutdown().get(2, TimeUnit.SECONDS);
 
         assertEquals(1, h.sources.get("src-on").shutdownCount.get());
         assertEquals(1, h.sinks.get("snk-on").shutdownCount.get());
-        assertEquals(1, h.lock.releaseCount.get());
+        assertEquals(1, h.election.shutdownCount.get());
     }
 
     @Test
@@ -334,7 +383,7 @@ class CoordinatorTest {
             assertTrue(h.streamProvider.created.isEmpty());
             assertTrue(h.sources.isEmpty());
             assertTrue(h.sinks.isEmpty());
-            assertEquals(1, h.lock.initCount.get());
+            assertEquals(1, h.election.startCount.get());
         } finally {
             h.coordinator.shutdown();
         }

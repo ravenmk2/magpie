@@ -6,36 +6,44 @@ import ravenworks.magpie.common.runtime.Lifecycle;
 import ravenworks.magpie.common.runtime.WorkLoop;
 import ravenworks.magpie.common.runtime.WorkLoopSignal;
 import ravenworks.magpie.common.runtime.WorkLoopState;
-import ravenworks.magpie.engine.api.lock.LeaderLock;
+import ravenworks.magpie.engine.api.election.LeaderElection;
 import ravenworks.magpie.engine.api.sink.SinkConnector;
 import ravenworks.magpie.engine.api.sink.SinkFactory;
+import ravenworks.magpie.engine.api.sink.TargetDefinition;
 import ravenworks.magpie.engine.api.sink.TargetRegistry;
 import ravenworks.magpie.engine.api.source.SourceConnector;
+import ravenworks.magpie.engine.api.source.SourceDefinition;
 import ravenworks.magpie.engine.api.source.SourceFactory;
 import ravenworks.magpie.engine.api.source.SourceRegistry;
 import ravenworks.magpie.engine.api.stream.StreamProducer;
 import ravenworks.magpie.engine.api.stream.StreamProvider;
 import ravenworks.magpie.engine.api.stream.StreamRegistry;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 
 /**
+ * 协调器：以 reconcile 循环驱动运行时向期望状态收敛。
+ * 触发源（唤醒信号、选举事件、IDLE resync 节拍）只发起收敛，本身不携带状态；
+ * 期望状态每轮从 Registry 实时读取，实际状态为运行中的连接器映射。
+ * 单个连接器启动失败只影响自身、下轮重试，不连坐其他连接器。
+ *
  * @author Raven
  */
 @Slf4j
 public class Coordinator implements Lifecycle {
 
     private static final Object WAKEUP_SIGNAL = new Object();
-    private static final int DEFAULT_IDLE_TIMEOUT_MS = 5_000;
+    private static final int DEFAULT_RESYNC_INTERVAL_MS = 5_000;
     private static final long CONNECTOR_SHUTDOWN_TIMEOUT_MS = 30_000;
+    private static final long ELECTION_SHUTDOWN_TIMEOUT_MS = 5_000;
 
     private final WorkLoop workLoop;
-    private final LeaderLock leaderLock;
+    private final LeaderElection leaderElection;
     private final StreamRegistry streamRegistry;
     private final StreamProvider streamProvider;
     private final SourceRegistry sourceRegistry;
@@ -43,14 +51,11 @@ public class Coordinator implements Lifecycle {
     private final TargetRegistry targetRegistry;
     private final SinkFactory sinkFactory;
     private final StreamProducer sourceProducer;
-    private final Map<String, SourceConnector> sourceConnectors = new LinkedHashMap<>();
-    private final Map<String, SinkConnector> sinkConnectors = new LinkedHashMap<>();
-    /**
-     * 连接器是否已启动；仅在事件循环线程读写
-     */
-    private boolean connectorsRunning;
+    private final Map<String, RunningSource> runningSources = new LinkedHashMap<>();
+    private final Map<String, RunningSink> runningSinks = new LinkedHashMap<>();
+    private final Set<String> createdStreams = new HashSet<>();
 
-    public Coordinator(@NonNull LeaderLock leaderLock,
+    public Coordinator(@NonNull LeaderElection leaderElection,
                        @NonNull StreamRegistry streamRegistry,
                        @NonNull StreamProvider streamProvider,
                        @NonNull SourceRegistry sourceRegistry,
@@ -58,11 +63,12 @@ public class Coordinator implements Lifecycle {
                        @NonNull TargetRegistry targetRegistry,
                        @NonNull SinkFactory sinkFactory,
                        @NonNull StreamProducer sourceProducer) {
-        this(leaderLock, streamRegistry, streamProvider,
-                sourceRegistry, sourceFactory, targetRegistry, sinkFactory, sourceProducer, DEFAULT_IDLE_TIMEOUT_MS);
+        this(leaderElection, streamRegistry, streamProvider,
+                sourceRegistry, sourceFactory, targetRegistry, sinkFactory, sourceProducer,
+                DEFAULT_RESYNC_INTERVAL_MS);
     }
 
-    public Coordinator(@NonNull LeaderLock leaderLock,
+    public Coordinator(@NonNull LeaderElection leaderElection,
                        @NonNull StreamRegistry streamRegistry,
                        @NonNull StreamProvider streamProvider,
                        @NonNull SourceRegistry sourceRegistry,
@@ -70,8 +76,8 @@ public class Coordinator implements Lifecycle {
                        @NonNull TargetRegistry targetRegistry,
                        @NonNull SinkFactory sinkFactory,
                        @NonNull StreamProducer sourceProducer,
-                       int idleTimeoutMs) {
-        this.leaderLock = leaderLock;
+                       int resyncIntervalMs) {
+        this.leaderElection = leaderElection;
         this.streamRegistry = streamRegistry;
         this.streamProvider = streamProvider;
         this.sourceRegistry = sourceRegistry;
@@ -79,7 +85,12 @@ public class Coordinator implements Lifecycle {
         this.targetRegistry = targetRegistry;
         this.sinkFactory = sinkFactory;
         this.sourceProducer = sourceProducer;
-        this.workLoop = new WorkLoop("Coordinator", idleTimeoutMs, this::dispatch);
+        this.workLoop = new WorkLoop("Coordinator", resyncIntervalMs, this::dispatch);
+        // 选举事件仅作触发器：入队后由 reconcile 重新读取 isLeader() 再收敛
+        this.leaderElection.addListener(event -> {
+            log.info("Leadership changed: {}", event);
+            this.workLoop.enqueue(event);
+        });
     }
 
     @Override
@@ -104,171 +115,177 @@ public class Coordinator implements Lifecycle {
         this.workLoop.enqueue(WAKEUP_SIGNAL);
     }
 
-    private void dispatch(Object event) {
-        if (event == WAKEUP_SIGNAL) {
-            this.onWakeup();
+    private void dispatch(Object message) {
+        if (message == WAKEUP_SIGNAL || message instanceof LeaderElection.Event) {
+            this.reconcile();
             return;
         }
-        if (event instanceof WorkLoopSignal signal) {
+        if (message instanceof WorkLoopSignal signal) {
             switch (signal) {
-                case IDLE -> this.onIdle();
-                case STARTED -> this.onStarted();
+                case IDLE -> this.reconcile();
+                case STARTED -> this.leaderElection.start();
                 case PRE_SHUTDOWN -> this.onPreShutdown();
                 case TERMINATED -> this.onTerminated();
             }
             return;
         }
-        log.warn("Unhandled event: {}", event);
-    }
-
-    private void onWakeup() {
-        this.coordinate();
-    }
-
-    private void onIdle() {
-        this.coordinate();
-    }
-
-    private void onStarted() {
-        this.leaderLock.init();
-    }
-
-    private void onTerminated() {
-        this.leaderLock.release();
-    }
-
-    private void coordinate() {
-        LeaderLock.PulseResult pr = this.leaderLock.pulse();
-        switch (pr) {
-            case ACQUIRED -> {
-                log.info("Leader elected");
-                this.onLeaderAcquired();
-            }
-            case RENEWED -> this.onLeaderRenewed();
-            case LOST -> {
-                log.warn("Leader lost");
-                this.onLeaderLost();
-            }
-            case FAILED -> { /* not the leader, nothing to do */ }
-        }
-    }
-
-    protected void onLeaderAcquired() {
-        this.startConnectors();
-    }
-
-    protected void onLeaderRenewed() {
-        if (!this.connectorsRunning) {
-            log.warn("Leader renewed but connectors are not running, restarting connectors");
-            this.startConnectors();
-        }
-    }
-
-    protected void onLeaderLost() {
-        this.connectorsRunning = false;
-        this.shutdownSourceConnectors();
-        this.shutdownSinkConnectors();
-    }
-
-    protected void onPreShutdown() {
-        this.connectorsRunning = false;
-        this.shutdownSourceConnectors();
-        this.shutdownSinkConnectors();
+        log.warn("Unhandled message: {}", message);
     }
 
     /**
-     * 启动 Stream 与全部连接器。任一步骤失败时回滚为未运行状态并清理已启动的连接器，
-     * 由后续 leader pulse（RENEWED）触发重试，避免 Leader 空转。
+     * 水平收敛：先退役（期望中不存在或定义已变更的连接器）并等待关停完成，
+     * 再启动缺口中的连接器，避免同名连接器新旧实例并存。
      */
-    private void startConnectors() {
-        try {
-            this.initStreams();
-            this.startSourceConnectors();
-            this.startSinkConnectors();
-            this.connectorsRunning = true;
-        } catch (Exception e) {
-            this.connectorsRunning = false;
-            log.error("Failed to start connectors, will retry on next leader pulse", e);
-            this.shutdownSourceConnectors();
-            this.shutdownSinkConnectors();
-        }
-    }
-
-    private void initStreams() {
-        var streams = this.streamRegistry.getStreams();
-        for (var stream : streams) {
-            this.streamProvider.create(stream);
-        }
-        log.info("Stream initialization complete, {} stream(s)", streams.size());
-    }
-
-    private void startSourceConnectors() {
-        var sources = this.sourceRegistry.getSources();
-        for (var definition : sources) {
-            if (!definition.isEnabled()) {
-                log.info("Source '{}' is disabled, skipping", definition.getName());
-                continue;
-            }
-            var connector = this.sourceFactory.create(this.sourceProducer, definition);
-            this.sourceConnectors.put(definition.getName(), connector);
-            connector.start();
-        }
-        log.info("Source connectors initialized, {} connector(s)", this.sourceConnectors.size());
-    }
-
-    private void shutdownSourceConnectors() {
-        if (this.sourceConnectors.isEmpty()) {
+    private void reconcile() {
+        List<CompletableFuture<Void>> stops = new ArrayList<>();
+        if (!this.leaderElection.isLeader()) {
+            this.createdStreams.clear();
+            this.retireSources(Map.of(), stops);
+            this.retireSinks(Map.of(), stops);
+            this.awaitStops(stops);
             return;
         }
-        var futures = new LinkedHashMap<String, CompletableFuture<Void>>();
-        this.sourceConnectors.forEach((name, connector) -> futures.put(name, connector.shutdown()));
-        awaitAll("Source", futures);
-        this.sourceConnectors.clear();
-        log.info("Source connectors shutdown complete");
+        this.reconcileStreams();
+        var sources = this.desiredSources();
+        var sinks = this.desiredSinks();
+        this.retireSources(sources, stops);
+        this.retireSinks(sinks, stops);
+        this.awaitStops(stops);
+        this.startSources(sources);
+        this.startSinks(sinks);
     }
 
-    private void startSinkConnectors() {
-        var targets = this.targetRegistry.getTargets();
-        for (var definition : targets) {
-            if (!definition.isEnabled()) {
-                log.info("Target '{}' is disabled, skipping", definition.getName());
+    private Map<String, SourceDefinition> desiredSources() {
+        return this.sourceRegistry.getSources().stream()
+                .filter(SourceDefinition::isEnabled)
+                .collect(Collectors.toMap(SourceDefinition::getName, Function.identity(),
+                        (a, b) -> a, LinkedHashMap::new));
+    }
+
+    private Map<String, TargetDefinition> desiredSinks() {
+        return this.targetRegistry.getTargets().stream()
+                .filter(TargetDefinition::isEnabled)
+                .collect(Collectors.toMap(TargetDefinition::getName, Function.identity(),
+                        (a, b) -> a, LinkedHashMap::new));
+    }
+
+    private void reconcileStreams() {
+        for (var stream : this.streamRegistry.getStreams()) {
+            if (this.createdStreams.contains(stream.name())) {
                 continue;
             }
-            var connector = this.sinkFactory.create(this.streamProvider, definition);
-            this.sinkConnectors.put(definition.getName(), connector);
-            connector.start();
+            try {
+                this.streamProvider.create(stream);
+                this.createdStreams.add(stream.name());
+            } catch (Exception e) {
+                log.error("Failed to create stream '{}', will retry on next reconcile", stream.name(), e);
+            }
         }
-        log.info("Sink connectors initialized, {} connector(s)", this.sinkConnectors.size());
     }
 
-    private void shutdownSinkConnectors() {
-        if (this.sinkConnectors.isEmpty()) {
-            return;
+    private void retireSources(Map<String, SourceDefinition> desired, List<CompletableFuture<Void>> stops) {
+        var it = this.runningSources.entrySet().iterator();
+        while (it.hasNext()) {
+            var entry = it.next();
+            var definition = desired.get(entry.getKey());
+            if (definition != null && definition.equals(entry.getValue().definition())) {
+                continue;
+            }
+            it.remove();
+            log.info("Source '{}' is out of desired state, stopping", entry.getKey());
+            stops.add(entry.getValue().connector().shutdown());
         }
-        var futures = new LinkedHashMap<String, CompletableFuture<Void>>();
-        this.sinkConnectors.forEach((name, connector) -> futures.put(name, connector.shutdown()));
-        awaitAll("Sink", futures);
-        this.sinkConnectors.clear();
-        log.info("Sink connectors shutdown complete");
     }
 
-    private static void awaitAll(String kind, Map<String, CompletableFuture<Void>> futures) {
+    private void retireSinks(Map<String, TargetDefinition> desired, List<CompletableFuture<Void>> stops) {
+        var it = this.runningSinks.entrySet().iterator();
+        while (it.hasNext()) {
+            var entry = it.next();
+            var definition = desired.get(entry.getKey());
+            if (definition != null && definition.equals(entry.getValue().definition())) {
+                continue;
+            }
+            it.remove();
+            log.info("Sink '{}' is out of desired state, stopping", entry.getKey());
+            stops.add(entry.getValue().connector().shutdown());
+        }
+    }
+
+    private void startSources(Map<String, SourceDefinition> desired) {
+        for (var definition : desired.values()) {
+            if (this.runningSources.containsKey(definition.getName())) {
+                continue;
+            }
+            try {
+                var connector = this.sourceFactory.create(this.sourceProducer, definition);
+                connector.start();
+                this.runningSources.put(definition.getName(), new RunningSource(definition, connector));
+                log.info("Source '{}' started", definition.getName());
+            } catch (Exception e) {
+                log.error("Failed to start source '{}', will retry on next reconcile", definition.getName(), e);
+            }
+        }
+    }
+
+    private void startSinks(Map<String, TargetDefinition> desired) {
+        for (var definition : desired.values()) {
+            if (this.runningSinks.containsKey(definition.getName())) {
+                continue;
+            }
+            try {
+                var connector = this.sinkFactory.create(this.streamProvider, definition);
+                connector.start();
+                this.runningSinks.put(definition.getName(), new RunningSink(definition, connector));
+                log.info("Sink '{}' started", definition.getName());
+            } catch (Exception e) {
+                log.error("Failed to start sink '{}', will retry on next reconcile", definition.getName(), e);
+            }
+        }
+    }
+
+    private void onPreShutdown() {
+        List<CompletableFuture<Void>> stops = new ArrayList<>();
+        this.retireSources(Map.of(), stops);
+        this.retireSinks(Map.of(), stops);
+        this.awaitStops(stops);
+    }
+
+    private void onTerminated() {
         try {
-            CompletableFuture.allOf(futures.values().toArray(CompletableFuture[]::new))
-                    .get(CONNECTOR_SHUTDOWN_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-        } catch (TimeoutException e) {
-            futures.forEach((name, future) -> {
-                if (!future.isDone()) {
-                    log.error("{} connector '{}' did not stop within {} ms",
-                            kind, name, CONNECTOR_SHUTDOWN_TIMEOUT_MS);
-                }
-            });
+            this.leaderElection.shutdown().get(ELECTION_SHUTDOWN_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            log.error("{} connectors shutdown interrupted", kind, e);
+            log.error("Leader election shutdown interrupted", e);
         } catch (Exception e) {
-            log.error("{} connectors shutdown failed", kind, e);
+            log.error("Leader election shutdown failed or timed out", e);
         }
+    }
+
+    private static void awaitStops(List<CompletableFuture<Void>> stops) {
+        if (stops.isEmpty()) {
+            return;
+        }
+        try {
+            CompletableFuture.allOf(stops.toArray(CompletableFuture[]::new))
+                    .get(CONNECTOR_SHUTDOWN_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            log.error("Connector(s) did not stop within {} ms", CONNECTOR_SHUTDOWN_TIMEOUT_MS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Connectors shutdown interrupted", e);
+        } catch (Exception e) {
+            log.error("Connectors shutdown failed", e);
+        }
+    }
+
+
+    private record RunningSource(SourceDefinition definition, SourceConnector connector) {
+
+    }
+
+
+    private record RunningSink(TargetDefinition definition, SinkConnector connector) {
+
     }
 
 }

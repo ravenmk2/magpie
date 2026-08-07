@@ -39,7 +39,9 @@ public class SinkWorker implements Lifecycle {
     private final AtomicLong lastOffset = new AtomicLong(-1);
 
     private volatile Thread loopThread;
-    /** 部分处置（中断信号）后置位：不再拉取，未处置后缀等重启从未提交 offset 重投 */
+    /**
+     * 部分处置（中断信号）后置位：不再拉取，未处置后缀等重启从未提交 offset 重投
+     */
     private boolean halted;
 
     public SinkWorker(@NonNull String name,

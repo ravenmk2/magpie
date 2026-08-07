@@ -30,6 +30,7 @@ public abstract class RetryingDeliverer implements Deliverer {
 
     protected enum State {NORMAL, RETRYING}
 
+
     protected static final int EMPTY_POLL_THRESHOLD = 5;
 
     protected final String name;
@@ -41,9 +42,13 @@ public abstract class RetryingDeliverer implements Deliverer {
     protected State state = State.NORMAL;
     protected boolean hasRetryable;
     private int emptyPollCount;
-    /** 停机标志：由 onShutdown 从停机线程写入，落库重试循环据此放弃 */
+    /**
+     * 停机标志：由 onShutdown 从停机线程写入，落库重试循环据此放弃
+     */
     private volatile boolean shutdownRequested;
-    /** 停机时落库失败的最小 offset：停机提交不得越过它（at-least-once 缺口防护） */
+    /**
+     * 停机时落库失败的最小 offset：停机提交不得越过它（at-least-once 缺口防护）
+     */
     private long firstUnpersistedOffset = Long.MAX_VALUE;
 
     protected RetryingDeliverer(@NonNull String name,
@@ -178,15 +183,21 @@ public abstract class RetryingDeliverer implements Deliverer {
         }
     }
 
-    /** 把待重投记录按模式切成投递分组（BEST_EFFORT 整批；KEY_ORDERED 按 key 切子批）。 */
+    /**
+     * 把待重投记录按模式切成投递分组（BEST_EFFORT 整批；KEY_ORDERED 按 key 切子批）。
+     */
     protected abstract List<List<ConsumerRecord>> group(List<ConsumerRecord> records);
 
-    /** 重试库排空、退出 RETRYING 时回调（如刷新阻塞集合）。 */
+    /**
+     * 重试库排空、退出 RETRYING 时回调（如刷新阻塞集合）。
+     */
     protected void onRetryDrained() {
         log.info("[{}] exiting RETRYING mode", this.name);
     }
 
-    /** 重试周期出现失败、退回 NORMAL 时回调。 */
+    /**
+     * 重试周期出现失败、退回 NORMAL 时回调。
+     */
     protected void onRetryFailed(int failedCount) {
         log.info("[{}] retry batch had {} failure(s), exiting RETRYING mode", this.name, failedCount);
     }

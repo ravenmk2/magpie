@@ -3,9 +3,9 @@ package ravenworks.magpie.server.config;
 import lombok.NonNull;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import ravenworks.magpie.engine.impl.rabbitmq.RabbitStreamProvider;
 import ravenworks.magpie.engine.api.stream.OffsetTracker;
 import ravenworks.magpie.engine.api.stream.StreamProvider;
+import ravenworks.magpie.engine.impl.rabbitmq.RabbitStreamProvider;
 
 
 /**

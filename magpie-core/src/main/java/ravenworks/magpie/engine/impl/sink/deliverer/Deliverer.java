@@ -18,11 +18,15 @@ import java.util.List;
  */
 public interface Deliverer {
 
-    /** Worker 启动后回调（consumer.start 之后、首次拉取之前）。 */
+    /**
+     * Worker 启动后回调（consumer.start 之后、首次拉取之前）。
+     */
     default void onStart() {
     }
 
-    /** 本周期该做什么：拉取新消息 / 执行重试 / 等待（熔断开启，Worker 不拉取、空转一轮）。 */
+    /**
+     * 本周期该做什么：拉取新消息 / 执行重试 / 等待（熔断开启，Worker 不拉取、空转一轮）。
+     */
     Action nextAction();
 
     /**
@@ -34,20 +38,28 @@ public interface Deliverer {
      */
     long onBatch(List<ConsumerRecord> records);
 
-    /** 拉取为空时回调：重试类模式在此累计空闲并决定是否进入重试。 */
+    /**
+     * 拉取为空时回调：重试类模式在此累计空闲并决定是否进入重试。
+     */
     default void onEmptyPoll() {
     }
 
-    /** 执行一个重试周期：从 RetryStore 取到期项重投。 */
+    /**
+     * 执行一个重试周期：从 RetryStore 取到期项重投。
+     */
     default void retryCycle() {
     }
 
-    /** 停机提交前钳制水位：重试类模式不越过未落库缺口，其余模式原样返回。 */
+    /**
+     * 停机提交前钳制水位：重试类模式不越过未落库缺口，其余模式原样返回。
+     */
     default long clampCommit(long watermark) {
         return watermark;
     }
 
-    /** Worker 停机时主动通知：长循环（原地重试、落库重试）应尽快退出。由停机线程调用。 */
+    /**
+     * Worker 停机时主动通知：长循环（原地重试、落库重试）应尽快退出。由停机线程调用。
+     */
     default void onShutdown() {
     }
 
