@@ -19,6 +19,9 @@
   `streamUri()` 返回与生产配置同格式的 `rabbitmq-stream://` URI。
 - `TestJpa` — 最小 Spring 上下文（真实 Hibernate + Spring Data JPA，不依赖 Spring Boot），
   `hbm2ddl=none`，表结构一律来自 schema.sql。
+- `RecordingSinkProvider` / `RecordingSinkHandler` — 录制型 Sink：按 http sink 同款链路装配
+  （SinkWorker + 三种 DeliveryMode 的 Deliverer），handler 录制经手消息并可动态注入故障，
+  供 e2e 断言投递语义（熔断不生效是刻意简化）。
 
 约定：stream / schema 名带随机后缀或按测试类独立；异步断言用 Awaitility，禁止 sleep；
 容器随测试 JVM 退出由 Ryuk 回收，IT 不做显式清理。
@@ -28,13 +31,13 @@
 - `engine/impl/rabbitmq/RabbitStreamIT` — send/poll 往返、offset 提交语义（未提交重启重投、已提交不重投）
 - `domain/repository/LeaderLockRepositoryIT` — Leader 锁条件 UPDATE 的抢锁/续约/释放/过期接管
 - `engine/impl/election/LeaderElectionImplIT` — 选举生命周期（抢锁、事件、优雅关停放锁、重新接管）
-
-待补（下一增量）：
-
-- 引擎级 e2e：装配 Coordinator（真实 Stream + 真实 DB），Source 灌消息、Sink 到录制端，
-  断言三种 DeliveryMode 的顺序/重试/排空语义与重启恢复
-- 服务端 e2e：`@SpringBootTest` 随机端口 + Testcontainers，POST CloudEvent 全链路冒烟（2-3 个用例）
-- MySQL Source 的 outbox 轮询（第二个带 `docs/database/source-mysql.sql` 的 schema）
+- `engine/impl/runtime/CoordinatorE2eIT` — 引擎级 e2e：真实 Coordinator + Stream + DB，
+  录制 Sink 断言三种 DeliveryMode 的顺序/失败隔离/重试排空，以及重启后 RetryStore 存量排空
+- `engine/impl/source/mysql/MySqlPollSourceIT` — MySQL Source outbox 轮询（用
+  `docs/database/source-mysql.sql` 建表）：行按 (created_at, id) 序入 stream 并删除、readLag 生效
+- `server/ServerE2eIT`（magpie-server）— `@SpringBootTest` 随机端口 + 模块内自起 Testcontainers
+  （core 测试基建不跨模块），POST CloudEvent 全链路冒烟：structured/binary 两种绑定、
+  非法 topic 403、print sink 消费后 offset 提交
 
 ## 运行环境
 
