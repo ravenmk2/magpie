@@ -1,13 +1,13 @@
-name: tests
+name: Tests
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, develop]
   pull_request:
+    branches: [main, master, develop]
 
 jobs:
-  # 单元测试：快速门禁，无外部依赖
-  unit:
+  unit-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,9 +17,7 @@ jobs:
           java-version: '25'
           cache: maven
       - run: mvn -B test
-
-  # 集成测试：runner 自带 Docker，Testcontainers 起 MySQL / RabbitMQ Stream
-  it:
+  integration-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

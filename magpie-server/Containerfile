@@ -1,0 +1,18 @@
+FROM eclipse-temurin:25-jre AS builder
+WORKDIR /build
+COPY magpie-server/target/magpie-server-*.jar app.jar
+RUN java -Djarmode=tools -jar app.jar extract --layers --application-filename app.jar --destination extracted
+
+FROM eclipse-temurin:25-jre
+RUN groupadd --gid 1000 app && useradd --uid 1000 --gid app --no-create-home app
+
+WORKDIR /app
+RUN mkdir -p config logs && chown app:app config logs
+
+COPY --from=builder --chown=app:app /build/extracted/dependencies/ ./
+COPY --from=builder --chown=app:app /build/extracted/spring-boot-loader/ ./
+COPY --from=builder --chown=app:app /build/extracted/snapshot-dependencies/ ./
+COPY --from=builder --chown=app:app /build/extracted/application/ ./
+
+USER app
+ENTRYPOINT ["java", "-jar", "app.jar"]
