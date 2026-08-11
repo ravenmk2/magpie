@@ -140,8 +140,9 @@ class WorkLoopTest {
         loop.enqueue("fatal");
 
         var termination = loop.shutdown();
-        await().atMost(2, TimeUnit.SECONDS).until(() -> loop.getState() == WorkLoopState.TERMINATED);
+        await().atMost(2, TimeUnit.SECONDS).until(termination::isDone);
         assertTrue(termination.isCompletedExceptionally());
+        assertEquals(WorkLoopState.TERMINATED, loop.getState());
     }
 
     @Test

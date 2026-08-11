@@ -57,20 +57,21 @@ public class WorkLoop implements Lifecycle {
 
     @Override
     public CompletableFuture<Void> shutdown() {
-        if (this.state.compareAndSet(WorkLoopState.NEW, WorkLoopState.TERMINATED)) {
-            this.termination.complete(null);
-            return this.termination;
+        var prev = this.state.getAndUpdate(s -> switch (s) {
+            case NEW -> WorkLoopState.TERMINATED;
+            case RUNNING -> WorkLoopState.SHUTTING_DOWN;
+            default -> s;
+        });
+        switch (prev) {
+            case NEW -> this.termination.complete(null);
+            case RUNNING -> {
+                log.info("{} - Work loop shutdown requested", this.name);
+                this.queue.add(NOOP);
+            }
+            default -> {
+                // already shutting down or terminated
+            }
         }
-        var prev = this.state.getAndUpdate(s ->
-                s == WorkLoopState.RUNNING ? WorkLoopState.SHUTTING_DOWN : s);
-        if (prev == WorkLoopState.TERMINATED || prev == WorkLoopState.SHUTTING_DOWN) {
-            return this.termination;
-        }
-        if (prev != WorkLoopState.RUNNING) {
-            throw new IllegalStateException("Work loop is not running");
-        }
-        log.info("{} - Work loop shutdown requested", this.name);
-        this.queue.add(NOOP);
         return this.termination;
     }
 
@@ -87,21 +88,27 @@ public class WorkLoop implements Lifecycle {
     }
 
     private void run() {
+        Throwable error = null;
         try {
             this.doRun();
         } catch (Throwable e) {
-            log.error("{} - Work loop died", this.name, e);
-            this.termination.completeExceptionally(e);
+            error = e;
         } finally {
             this.state.set(WorkLoopState.TERMINATED);
-            log.info("{} - Work loop exited", this.name);
-            this.termination.complete(null);
+            if (error == null) {
+                this.termination.complete(null);
+                log.info("{} - Work loop exited", this.name);
+            } else {
+                this.termination.completeExceptionally(error);
+                log.error("{} - Work loop died", this.name, error);
+            }
         }
     }
 
     private void doRun() {
         log.info("{} - Work loop started", this.name);
         this.dispatch(WorkLoopSignal.STARTED);
+
         while (this.state.get() == WorkLoopState.RUNNING) {
             Object msg = this.poll(this.idleTimeout);
             this.dispatch(msg);
@@ -122,9 +129,6 @@ public class WorkLoop implements Lifecycle {
                     break;
                 }
             }
-            if (msg == WorkLoopSignal.IDLE) {
-                continue;
-            }
             this.dispatch(msg);
         }
     }
@@ -135,8 +139,8 @@ public class WorkLoop implements Lifecycle {
             return msg == null ? WorkLoopSignal.IDLE : msg;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            return null;
         }
-        return null;
     }
 
     private void dispatch(Object msg) {
