@@ -144,7 +144,10 @@ public class SinkWorker implements Lifecycle {
             log.warn("[{}] poll/process failed, retry in 1s", this.name, e);
             LockSupport.parkNanos(1_000_000_000L);
         } finally {
-            this.workLoop.enqueue(POLL_SIGNAL);
+            // 停机后不再自续轮询，避免 enqueue 撞 SHUTTING_DOWN 打丢弃告警
+            if (this.isRunning()) {
+                this.workLoop.enqueue(POLL_SIGNAL);
+            }
         }
     }
 

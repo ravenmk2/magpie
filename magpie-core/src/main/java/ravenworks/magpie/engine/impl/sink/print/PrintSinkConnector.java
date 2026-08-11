@@ -130,7 +130,9 @@ public class PrintSinkConnector implements SinkConnector {
             if (!batch.isEmpty()) {
                 this.consumer.commit(batch.getLast().getOffset());
             }
-            this.workLoop.enqueue(POLL_SIGNAL);
+            if (!this.stopped) {
+                this.workLoop.enqueue(POLL_SIGNAL);
+            }
         }
 
         private void log(ConsumerRecord record) {

@@ -170,8 +170,10 @@ public class MySqlPollSourceConnector implements SourceConnector {
         if (failed) {
             this.availableAt = System.currentTimeMillis() + this.properties.getRetryDelay();
         } else if (batch.size() == this.properties.getBatchSize()) {
-            // 满批全部成功：立即追批，不吃 pollInterval
-            this.workLoop.enqueue(POLL_SIGNAL);
+            // 满批全部成功：立即追批，不吃 pollInterval（停机后不再追，避免丢弃告警）
+            if (this.workLoop.getState() == WorkLoopState.RUNNING) {
+                this.workLoop.enqueue(POLL_SIGNAL);
+            }
         }
     }
 
