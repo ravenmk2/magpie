@@ -6,31 +6,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import ravenworks.magpie.domain.converter.JsonMapConverter;
 import ravenworks.magpie.domain.converter.StringMapConverter;
-import ravenworks.magpie.domain.entity.ConsumerOffsetEntity;
-import ravenworks.magpie.domain.entity.MessageLogEntity;
-import ravenworks.magpie.domain.entity.RetryMessageEntity;
-import ravenworks.magpie.domain.entity.SourceEntity;
-import ravenworks.magpie.domain.entity.TargetEntity;
-import ravenworks.magpie.domain.entity.TopicEntity;
-import ravenworks.magpie.domain.repository.ConsumerOffsetRepository;
-import ravenworks.magpie.domain.repository.MessageLogRepository;
-import ravenworks.magpie.domain.repository.RetryMessageRepository;
-import ravenworks.magpie.domain.repository.SourceRepository;
-import ravenworks.magpie.domain.repository.TargetRepository;
-import ravenworks.magpie.domain.repository.TopicRepository;
+import ravenworks.magpie.domain.entity.*;
+import ravenworks.magpie.domain.repository.*;
 
 import javax.sql.DataSource;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.function.Function;
 
 
@@ -266,6 +250,7 @@ public final class JpaTestSupport implements AutoCloseable {
         }
 
     }
+
 
     private static final class EntityStore<E> {
 

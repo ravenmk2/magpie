@@ -1,19 +1,6 @@
 package ravenworks.magpie.engine.impl.rabbitmq;
 
-import com.rabbitmq.stream.Consumer;
-import com.rabbitmq.stream.ConsumerBuilder;
-import com.rabbitmq.stream.ConsumerFlowStrategy;
-import com.rabbitmq.stream.ConsumerUpdateListener;
-import com.rabbitmq.stream.Environment;
-import com.rabbitmq.stream.Message;
-import com.rabbitmq.stream.MessageHandler;
-import com.rabbitmq.stream.OffsetSpecification;
-import com.rabbitmq.stream.ProducerBuilder;
-import com.rabbitmq.stream.Properties;
-import com.rabbitmq.stream.Resource;
-import com.rabbitmq.stream.StreamCreator;
-import com.rabbitmq.stream.StreamStats;
-import com.rabbitmq.stream.SubscriptionListener;
+import com.rabbitmq.stream.*;
 import org.junit.jupiter.api.Test;
 import ravenworks.magpie.engine.api.stream.ConsumerRecord;
 import ravenworks.magpie.engine.api.stream.OffsetTracker;
@@ -31,11 +18,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 
 /**
@@ -45,8 +28,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class RabbitStreamConsumerTest {
 
-    /** 测试夹具：持有捕获到的回调与可脚本化的 offset。 */
+    /**
+     * 测试夹具：持有捕获到的回调与可脚本化的 offset。
+     */
     private static final class Fixture {
+
         final AtomicLong trackedOffset = new AtomicLong(-1);
         final AtomicReference<MessageHandler> messageHandler = new AtomicReference<>();
         final AtomicReference<SubscriptionListener> subscriptionListener = new AtomicReference<>();
@@ -54,6 +40,7 @@ class RabbitStreamConsumerTest {
 
         Fixture() {
             OffsetTracker tracker = new OffsetTracker() {
+
                 @Override
                 public long read(String name, int partition) {
                     return Fixture.this.trackedOffset.get();
@@ -73,7 +60,9 @@ class RabbitStreamConsumerTest {
             this.consumer.start();
         }
 
-        /** 将一条消息经 messageHandler 送入队列，再通过 poll 触发 convert。 */
+        /**
+         * 将一条消息经 messageHandler 送入队列，再通过 poll 触发 convert。
+         */
         ConsumerRecord deliver(MessageHandler.Context ctx, Message msg) {
             this.messageHandler.get().handle(ctx, msg);
             List<ConsumerRecord> records = this.consumer.poll(1, Duration.ofSeconds(1));
@@ -81,10 +70,13 @@ class RabbitStreamConsumerTest {
             return records.get(0);
         }
 
-        /** 触发 subscriptionListener，返回最终写入的 OffsetSpecification。 */
+        /**
+         * 触发 subscriptionListener，返回最终写入的 OffsetSpecification。
+         */
         OffsetSpecification resolveOffset() {
             var specRef = new AtomicReference<OffsetSpecification>();
             this.subscriptionListener.get().preSubscribe(new SubscriptionListener.SubscriptionContext() {
+
                 @Override
                 public OffsetSpecification offsetSpecification() {
                     return specRef.get();
@@ -102,6 +94,7 @@ class RabbitStreamConsumerTest {
             });
             return specRef.get();
         }
+
     }
 
     // ---------- resolveOffset（经 subscriptionListener 间接验证） ----------
@@ -240,8 +233,12 @@ class RabbitStreamConsumerTest {
 
     // ---------- 手写 stub ----------
 
-    /** 可控 offset/timestamp 的 MessageHandler.Context。 */
+
+    /**
+     * 可控 offset/timestamp 的 MessageHandler.Context。
+     */
     private static final class FakeContext implements MessageHandler.Context {
+
         private final long offset;
 
         FakeContext(long offset) {
@@ -280,10 +277,15 @@ class RabbitStreamConsumerTest {
         @Override
         public void processed() {
         }
+
     }
 
-    /** 可控 body/properties/applicationProperties 的 Message。 */
+
+    /**
+     * 可控 body/properties/applicationProperties 的 Message。
+     */
     private static final class FakeMessage implements Message {
+
         private final byte[] body;
         private final Properties properties;
         private final Map<String, Object> applicationProperties;
@@ -328,10 +330,15 @@ class RabbitStreamConsumerTest {
         public Map<String, Object> getMessageAnnotations() {
             return null;
         }
+
     }
 
-    /** 仅 messageId 可控的 Properties，其余返回默认值。 */
+
+    /**
+     * 仅 messageId 可控的 Properties，其余返回默认值。
+     */
     private static final class FakeProperties implements Properties {
+
         private final Object messageId;
 
         FakeProperties(Object messageId) {
@@ -442,10 +449,15 @@ class RabbitStreamConsumerTest {
         public String getReplyToGroupId() {
             return null;
         }
+
     }
 
-    /** 捕获回调的 ConsumerBuilder 链 stub。 */
+
+    /**
+     * 捕获回调的 ConsumerBuilder 链 stub。
+     */
     private static final class FakeConsumerBuilder implements ConsumerBuilder {
+
         private final AtomicReference<MessageHandler> messageHandler;
         private final AtomicReference<SubscriptionListener> subscriptionListener;
 
@@ -505,6 +517,7 @@ class RabbitStreamConsumerTest {
         @Override
         public ManualTrackingStrategy manualTrackingStrategy() {
             return new ManualTrackingStrategy() {
+
                 @Override
                 public ManualTrackingStrategy checkInterval(Duration duration) {
                     return this;
@@ -520,6 +533,7 @@ class RabbitStreamConsumerTest {
         @Override
         public AutoTrackingStrategy autoTrackingStrategy() {
             return new AutoTrackingStrategy() {
+
                 @Override
                 public AutoTrackingStrategy messageCountBeforeStorage(int count) {
                     return this;
@@ -545,6 +559,7 @@ class RabbitStreamConsumerTest {
         @Override
         public FilterConfiguration filter() {
             return new FilterConfiguration() {
+
                 @Override
                 public FilterConfiguration values(String... values) {
                     return this;
@@ -575,6 +590,7 @@ class RabbitStreamConsumerTest {
         @Override
         public FlowConfiguration flow() {
             return new FlowConfiguration() {
+
                 @Override
                 public FlowConfiguration initialCredits(int initialCredits) {
                     return this;
@@ -595,6 +611,7 @@ class RabbitStreamConsumerTest {
         @Override
         public Consumer build() {
             return new Consumer() {
+
                 @Override
                 public void store(long offset) {
                 }
@@ -609,10 +626,15 @@ class RabbitStreamConsumerTest {
                 }
             };
         }
+
     }
 
-    /** 仅 consumerBuilder 可用的 Environment stub。 */
+
+    /**
+     * 仅 consumerBuilder 可用的 Environment stub。
+     */
     private static final class FakeEnvironment implements Environment {
+
         private final FakeConsumerBuilder consumerBuilder;
 
         FakeEnvironment(AtomicReference<MessageHandler> messageHandler,
@@ -663,6 +685,7 @@ class RabbitStreamConsumerTest {
         @Override
         public void close() {
         }
+
     }
 
 }

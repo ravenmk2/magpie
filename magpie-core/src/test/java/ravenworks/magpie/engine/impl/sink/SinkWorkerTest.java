@@ -34,6 +34,7 @@ class SinkWorkerTest {
         private final Queue<List<ConsumerRecord>> scripted = new ConcurrentLinkedQueue<>();
         final AtomicBoolean started = new AtomicBoolean();
         final AtomicBoolean stopped = new AtomicBoolean();
+        final AtomicBoolean failFatally = new AtomicBoolean();
         final AtomicInteger pollCount = new AtomicInteger();
         final List<Long> commits = new CopyOnWriteArrayList<>();
 
@@ -59,6 +60,9 @@ class SinkWorkerTest {
         @Override
         public List<ConsumerRecord> poll(int count, Duration timeout) {
             this.pollCount.incrementAndGet();
+            if (this.failFatally.get()) {
+                throw new AssertionError("simulated fatal poll failure");
+            }
             var batch = this.scripted.poll();
             return batch != null ? batch : List.of();
         }
@@ -287,6 +291,23 @@ class SinkWorkerTest {
         } finally {
             h.shutdown();
         }
+    }
+
+    @Test
+    void shutdownAfterLoopDiedStillStopsConsumer() throws Exception {
+        var h = new Harness(60_000);
+        h.worker.start();
+        await().atMost(2, TimeUnit.SECONDS).until(() -> h.consumer.pollCount.get() > 0);
+        assertTrue(h.worker.isAlive());
+
+        // 循环线程被 Error 杀死：PRE_SHUTDOWN 不会执行，isAlive 随之翻转为 false
+        h.consumer.failFatally.set(true);
+        await().atMost(2, TimeUnit.SECONDS).until(() -> !h.worker.isAlive());
+
+        // shutdown 仍须兜底停掉 consumer（避免底层订阅挂在死线程上泄漏），
+        // 且停止一个已死 worker 是干净的成功路径（future 正常完成）
+        h.worker.shutdown().get(2, TimeUnit.SECONDS);
+        assertTrue(h.consumer.stopped.get());
     }
 
     @Test

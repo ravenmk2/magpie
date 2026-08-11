@@ -14,10 +14,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 
 class SourceFactoryImplTest {
@@ -37,6 +34,7 @@ class SourceFactoryImplTest {
         var capturedName = new AtomicReference<String>();
         var capturedProperties = new AtomicReference<Map<String, Object>>();
         var provider = new SourceProvider() {
+
             @Override
             public String type() {
                 return "mysql";
@@ -100,6 +98,7 @@ class SourceFactoryImplTest {
 
     private static SourceProvider stubProvider(String type, SourceConnector connector, AtomicInteger creations) {
         return new SourceProvider() {
+
             @Override
             public String type() {
                 return type;
@@ -115,6 +114,7 @@ class SourceFactoryImplTest {
 
     private static SourceConnector stubConnector(String type, String name) {
         return new SourceConnector() {
+
             @Override
             public String type() {
                 return type;
@@ -133,11 +133,17 @@ class SourceFactoryImplTest {
             public CompletableFuture<Void> shutdown() {
                 return CompletableFuture.completedFuture(null);
             }
+
+            @Override
+            public boolean isAlive() {
+                return true;
+            }
         };
     }
 
     private static StreamProducer stubStreamProducer() {
         return new StreamProducer() {
+
             @Override
             public CompletableFuture<SendResult> send(MessageRecord record) {
                 return CompletableFuture.completedFuture(new SendResult()

@@ -15,4 +15,6 @@ public interface StreamProvider extends AutoCloseable {
 
     List<StreamConsumer> consumer(StreamDefinition definition, String name);
 
+    StreamConsumer consumer(StreamDefinition definition, int partition, String name);
+
 }

@@ -75,6 +75,11 @@ public class MySqlPollSourceConnector implements SourceConnector {
         return this.workLoop.shutdown();
     }
 
+    @Override
+    public boolean isAlive() {
+        return this.workLoop.isAlive();
+    }
+
     private void dispatch(Object event) {
         if (event == WorkLoopSignal.STARTED) {
             var p = this.properties;

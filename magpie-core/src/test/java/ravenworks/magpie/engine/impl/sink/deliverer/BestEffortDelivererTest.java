@@ -12,9 +12,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.awaitility.Awaitility.await;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 
 class BestEffortDelivererTest {
@@ -140,6 +138,7 @@ class BestEffortDelivererTest {
             this.queries.incrementAndGet();
             return super.listRetryable(consumer, count);
         }
+
     }
 
     @Test

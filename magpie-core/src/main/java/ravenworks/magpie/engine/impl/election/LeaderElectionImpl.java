@@ -55,6 +55,11 @@ public class LeaderElectionImpl implements LeaderElection {
     }
 
     @Override
+    public boolean isAlive() {
+        return this.workLoop.isAlive();
+    }
+
+    @Override
     public boolean isLeader() {
         return this.leader.get();
     }

@@ -12,6 +12,7 @@ public interface ConsumerOffsetRepository extends JpaRepository<ConsumerOffsetEn
 
     /**
      * 修改查询自带事务：OffsetTrackerImpl 经 static @Bean 装配（不受 AOP 代理，方法级
+     *
      * @Transactional 不生效），此处的方法级注解是保证 @Modifying 有活动事务的唯一可靠方式
      * （与 LeaderLockRepository 同一约定）。
      */

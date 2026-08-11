@@ -5,7 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import ravenworks.magpie.common.runtime.Lifecycle;
 import ravenworks.magpie.common.runtime.WorkLoop;
 import ravenworks.magpie.common.runtime.WorkLoopSignal;
-import ravenworks.magpie.common.runtime.WorkLoopState;
 import ravenworks.magpie.engine.api.election.LeaderElection;
 import ravenworks.magpie.engine.api.sink.SinkConnector;
 import ravenworks.magpie.engine.api.sink.SinkFactory;
@@ -29,7 +28,8 @@ import java.util.stream.Collectors;
 /**
  * 协调器：以 reconcile 循环驱动运行时向期望状态收敛。
  * 触发源（唤醒信号、选举事件、IDLE resync 节拍）只发起收敛，本身不携带状态；
- * 期望状态每轮从 Registry 实时读取，实际状态为运行中的连接器映射。
+ * 期望状态每轮从 Registry 实时读取，实际状态为运行中的连接器映射
+ * （含 isAlive 存活观测：配置未变但已死亡的连接器同样退役重建）。
  * 单个连接器启动失败只影响自身、下轮重试，不连坐其他连接器。
  *
  * @author Raven
@@ -38,7 +38,7 @@ import java.util.stream.Collectors;
 public class Coordinator implements Lifecycle {
 
     private static final Object WAKEUP_SIGNAL = new Object();
-    private static final int DEFAULT_RESYNC_INTERVAL_MS = 5_000;
+    private static final int DEFAULT_RESYNC_INTERVAL_MS = 10_000;
     private static final long CONNECTOR_SHUTDOWN_TIMEOUT_MS = 30_000;
     private static final long ELECTION_SHUTDOWN_TIMEOUT_MS = 5_000;
 
@@ -120,12 +120,16 @@ public class Coordinator implements Lifecycle {
         return this.workLoop.shutdown();
     }
 
+    @Override
+    public boolean isAlive() {
+        return this.workLoop.isAlive();
+    }
+
     /**
      * 协调器是否处于运行中（含正在停机）：供生命周期装配如实上报状态。
      */
     public boolean isRunning() {
-        var state = this.workLoop.getState();
-        return state == WorkLoopState.RUNNING || state == WorkLoopState.SHUTTING_DOWN;
+        return this.isAlive();
     }
 
     public void wake() {
@@ -205,11 +209,16 @@ public class Coordinator implements Lifecycle {
         while (it.hasNext()) {
             var entry = it.next();
             var definition = desired.get(entry.getKey());
-            if (definition != null && definition.equals(entry.getValue().definition())) {
+            boolean inDesired = definition != null && definition.equals(entry.getValue().definition());
+            if (inDesired && entry.getValue().connector().isAlive()) {
                 continue;
             }
             it.remove();
-            log.info("Source '{}' is out of desired state, stopping", entry.getKey());
+            if (inDesired) {
+                log.info("Source '{}' is not alive, restarting", entry.getKey());
+            } else {
+                log.info("Source '{}' is out of desired state, stopping", entry.getKey());
+            }
             stops.add(entry.getValue().connector().shutdown());
         }
     }
@@ -219,11 +228,16 @@ public class Coordinator implements Lifecycle {
         while (it.hasNext()) {
             var entry = it.next();
             var definition = desired.get(entry.getKey());
-            if (definition != null && definition.equals(entry.getValue().definition())) {
+            boolean inDesired = definition != null && definition.equals(entry.getValue().definition());
+            if (inDesired && entry.getValue().connector().isAlive()) {
                 continue;
             }
             it.remove();
-            log.info("Sink '{}' is out of desired state, stopping", entry.getKey());
+            if (inDesired) {
+                log.info("Sink '{}' is not alive, restarting", entry.getKey());
+            } else {
+                log.info("Sink '{}' is out of desired state, stopping", entry.getKey());
+            }
             stops.add(entry.getValue().connector().shutdown());
         }
     }

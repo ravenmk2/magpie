@@ -7,9 +7,7 @@ import ravenworks.magpie.domain.JpaTestSupport;
 import ravenworks.magpie.domain.entity.ConsumerOffsetEntity;
 import ravenworks.magpie.domain.repository.ConsumerOffsetRepository;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 
 class OffsetTrackerImplTest {

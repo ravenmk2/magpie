@@ -19,6 +19,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
 
@@ -42,6 +43,7 @@ public class HttpSourceConnector implements SourceConnector {
     private final Set<String> exactTopics;
     private final List<Pattern> wildcardPatterns;
     private final Cache<String, Boolean> wildcardCache;
+    private final AtomicBoolean running = new AtomicBoolean(false);
 
     public HttpSourceConnector(@NonNull HttpSourceRouter router,
                                @NonNull StreamProducer producer,
@@ -80,12 +82,19 @@ public class HttpSourceConnector implements SourceConnector {
     @Override
     public void start() {
         this.router.subscribe(this.name, this::onMessage);
+        this.running.set(true);
     }
 
     @Override
     public CompletableFuture<Void> shutdown() {
+        this.running.set(false);
         this.router.unsubscribe(this.name);
         return CompletableFuture.completedFuture(null);
+    }
+
+    @Override
+    public boolean isAlive() {
+        return this.running.get();
     }
 
     private void onMessage(HttpMessageContext context) {

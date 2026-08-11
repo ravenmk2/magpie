@@ -84,7 +84,18 @@ public class SinkWorker implements Lifecycle {
         if (t != null) {
             LockSupport.unpark(t);
         }
-        return this.workLoop.shutdown();
+        // 循环线程异常死亡（Error）时 PRE_SHUTDOWN 不会执行，须兜底停掉 consumer，
+        // 避免底层订阅挂在死线程上泄漏；死亡异常已由 WorkLoop 记录，这里吞掉，
+        // 使"停止一个已死 worker"成为干净的成功路径
+        return this.workLoop.shutdown().handle((v, e) -> {
+            this.stopConsumer();
+            return null;
+        });
+    }
+
+    @Override
+    public boolean isAlive() {
+        return this.workLoop.isAlive();
     }
 
     private void dispatch(Object event) {
@@ -113,6 +124,14 @@ public class SinkWorker implements Lifecycle {
 
     private void onPreShutdown() {
         this.commitOffset();
+        this.stopConsumer();
+    }
+
+    /**
+     * 幂等停止底层 consumer：正常停机由 PRE_SHUTDOWN 在循环线程内调用，
+     * 循环异常死亡时由 shutdown() 兜底调用。
+     */
+    private void stopConsumer() {
         try {
             this.consumer.stop();
         } catch (Exception ex) {

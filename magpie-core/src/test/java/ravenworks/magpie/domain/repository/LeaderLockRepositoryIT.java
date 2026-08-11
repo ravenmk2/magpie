@@ -1,11 +1,6 @@
 package ravenworks.magpie.domain.repository;
 
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.MethodOrderer;
-import org.junit.jupiter.api.Order;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.api.*;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import ravenworks.magpie.domain.entity.LeaderLockEntity;
 import ravenworks.magpie.testsupport.TestJpa;

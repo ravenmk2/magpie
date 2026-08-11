@@ -55,6 +55,13 @@ public class RabbitStreamProvider implements StreamProvider {
         return consumers;
     }
 
+    @Override
+    public StreamConsumer consumer(@NonNull StreamDefinition definition,
+                                   int partition,
+                                   @NonNull String name) {
+        return new RabbitStreamConsumer(this.environment, definition, partition, name, this.offsetTracker);
+    }
+
     private void createStream(@NonNull String name,
                               @NonNull Map<String, Object> arguments) {
         var creator = this.environment.streamCreator()

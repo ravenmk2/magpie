@@ -1,25 +1,14 @@
 package ravenworks.magpie.engine.impl.runtime;
 
 import io.cloudevents.core.builder.CloudEventBuilder;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.MethodOrderer;
-import org.junit.jupiter.api.Order;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.api.*;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 import ravenworks.magpie.common.util.Uuids;
 import ravenworks.magpie.domain.entity.SourceEntity;
 import ravenworks.magpie.domain.entity.TargetEntity;
 import ravenworks.magpie.domain.entity.TopicEntity;
-import ravenworks.magpie.domain.repository.ConsumerOffsetRepository;
-import ravenworks.magpie.domain.repository.LeaderLockRepository;
-import ravenworks.magpie.domain.repository.MessageLogRepository;
-import ravenworks.magpie.domain.repository.RetryMessageRepository;
-import ravenworks.magpie.domain.repository.SourceRepository;
-import ravenworks.magpie.domain.repository.TargetRepository;
-import ravenworks.magpie.domain.repository.TopicRepository;
+import ravenworks.magpie.domain.repository.*;
 import ravenworks.magpie.engine.api.retry.RetryMessageStore;
 import ravenworks.magpie.engine.api.source.http.TopicNotAllowedException;
 import ravenworks.magpie.engine.api.stream.ConsumerRecord;
@@ -35,11 +24,7 @@ import ravenworks.magpie.engine.impl.source.http.HttpSourceRouterImpl;
 import ravenworks.magpie.engine.impl.stream.OffsetTrackerImpl;
 import ravenworks.magpie.engine.impl.stream.RoutingStreamProducer;
 import ravenworks.magpie.engine.impl.stream.StreamRegistryImpl;
-import ravenworks.magpie.testsupport.RecordingSinkHandler;
-import ravenworks.magpie.testsupport.RecordingSinkProvider;
-import ravenworks.magpie.testsupport.TestJpa;
-import ravenworks.magpie.testsupport.TestMySql;
-import ravenworks.magpie.testsupport.TestRabbitMq;
+import ravenworks.magpie.testsupport.*;
 
 import javax.sql.DataSource;
 import java.net.URI;
@@ -53,10 +38,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 
 import static org.awaitility.Awaitility.await;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 
 /**

@@ -6,6 +6,9 @@ import ravenworks.magpie.engine.api.sink.SinkStatus;
 import ravenworks.magpie.engine.api.stream.ConsumerRecord;
 import ravenworks.magpie.engine.api.stream.MessageRecord;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLSession;
 import java.io.IOException;
 import java.net.Authenticator;
 import java.net.CookieHandler;
@@ -27,9 +30,6 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLParameters;
-import javax.net.ssl.SSLSession;
 
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.*;
@@ -212,8 +212,11 @@ class HttpSinkHandlerTest {
         }
     }
 
-    /** 脚本化的一次 send：固定返回状态码、延迟返回，或直接抛异常 */
+    /**
+     * 脚本化的一次 send：固定返回状态码、延迟返回，或直接抛异常
+     */
     private record Step(Integer status, Throwable error, long delayMs) {
+
         static Step respond(int status) {
             return new Step(status, null, 0);
         }
@@ -225,7 +228,9 @@ class HttpSinkHandlerTest {
         static Step fail(Throwable error) {
             return new Step(null, error, 0);
         }
+
     }
+
 
     static class StubHttpClient extends HttpClient {
 
@@ -273,6 +278,7 @@ class HttpSinkHandlerTest {
 
         private static HttpResponse<String> stubResponse(int status) {
             return new HttpResponse<>() {
+
                 @Override
                 public int statusCode() {
                     return status;

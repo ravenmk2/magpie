@@ -13,10 +13,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 
 class SinkFactoryImplTest {
@@ -73,6 +70,7 @@ class SinkFactoryImplTest {
 
     private static SinkProvider stubProvider(String type, SinkConnector connector, AtomicInteger creations) {
         return new SinkProvider() {
+
             @Override
             public String type() {
                 return type;
@@ -88,6 +86,7 @@ class SinkFactoryImplTest {
 
     private static SinkConnector stubConnector(String type, String name) {
         return new SinkConnector() {
+
             @Override
             public String type() {
                 return type;
@@ -106,11 +105,17 @@ class SinkFactoryImplTest {
             public CompletableFuture<Void> shutdown() {
                 return CompletableFuture.completedFuture(null);
             }
+
+            @Override
+            public boolean isAlive() {
+                return true;
+            }
         };
     }
 
     private static StreamProvider stubStreamProvider() {
         return new StreamProvider() {
+
             @Override
             public void create(StreamDefinition definition) {
             }
@@ -123,6 +128,11 @@ class SinkFactoryImplTest {
             @Override
             public List<StreamConsumer> consumer(StreamDefinition definition, String name) {
                 return List.of();
+            }
+
+            @Override
+            public StreamConsumer consumer(StreamDefinition definition, int partition, String name) {
+                throw new UnsupportedOperationException();
             }
 
             @Override

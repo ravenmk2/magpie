@@ -65,6 +65,11 @@ class CoordinatorTest {
             return CompletableFuture.completedFuture(null);
         }
 
+        @Override
+        public boolean isAlive() {
+            return true;
+        }
+
     }
 
 
@@ -75,6 +80,7 @@ class CoordinatorTest {
         final AtomicInteger startCount = new AtomicInteger();
         final AtomicInteger shutdownCount = new AtomicInteger();
         volatile boolean hangShutdown;
+        private volatile boolean alive = true;
 
         FakeConnector(String name, String type) {
             this.name = name;
@@ -103,6 +109,18 @@ class CoordinatorTest {
             return this.hangShutdown ? new CompletableFuture<>() : CompletableFuture.completedFuture(null);
         }
 
+        @Override
+        public boolean isAlive() {
+            return this.alive;
+        }
+
+        /**
+         * 模拟连接器静默死亡：配置未变，等待 Coordinator 下轮 reconcile 观测并重建
+         */
+        void kill() {
+            this.alive = false;
+        }
+
     }
 
 
@@ -127,6 +145,11 @@ class CoordinatorTest {
         @Override
         public List<StreamConsumer> consumer(StreamDefinition definition, String name) {
             return List.of();
+        }
+
+        @Override
+        public StreamConsumer consumer(StreamDefinition definition, int partition, String name) {
+            throw new UnsupportedOperationException();
         }
 
         @Override
@@ -206,13 +229,13 @@ class CoordinatorTest {
             // timeoutMs > 0 时走注入超时的构造器，否则走默认构造器保持原有行为
             this.coordinator = connectorShutdownTimeoutMs > 0
                     ? new Coordinator(
-                            this.election, streamRegistry, this.streamProvider,
-                            sourceRegistry, sourceFactory, targetRegistry, sinkFactory,
-                            new FakeStreamProducer(), resyncIntervalMs, connectorShutdownTimeoutMs)
+                    this.election, streamRegistry, this.streamProvider,
+                    sourceRegistry, sourceFactory, targetRegistry, sinkFactory,
+                    new FakeStreamProducer(), resyncIntervalMs, connectorShutdownTimeoutMs)
                     : new Coordinator(
-                            this.election, streamRegistry, this.streamProvider,
-                            sourceRegistry, sourceFactory, targetRegistry, sinkFactory,
-                            new FakeStreamProducer(), resyncIntervalMs);
+                    this.election, streamRegistry, this.streamProvider,
+                    sourceRegistry, sourceFactory, targetRegistry, sinkFactory,
+                    new FakeStreamProducer(), resyncIntervalMs);
         }
 
         private static SourceDefinition source(String name, boolean enabled) {
@@ -463,6 +486,34 @@ class CoordinatorTest {
             await().atMost(2, TimeUnit.SECONDS).until(() ->
                     h.allSources.size() == 2 && h.allSources.get(1).startCount.get() == 1
                             && h.allSinks.size() == 2 && h.allSinks.get(1).startCount.get() == 1);
+        } finally {
+            h.coordinator.shutdown();
+        }
+    }
+
+    @Test
+    void deadConnectorIsRecreatedWithUnchangedConfig() throws Exception {
+        var h = new Harness();
+        try {
+            h.coordinator.start();
+            h.election.setLeader(true);
+            h.awaitStarted();
+
+            // 连接器静默死亡（配置未变）：下轮 reconcile 观测到 isAlive=false，
+            // 退役旧实例并以同一期望定义重建
+            h.sources.get("src-on").kill();
+            h.sinks.get("snk-on").kill();
+            await().atMost(2, TimeUnit.SECONDS).until(() ->
+                    h.allSources.size() == 2 && h.allSources.get(0).shutdownCount.get() == 1
+                            && h.allSources.get(1).startCount.get() == 1
+                            && h.allSinks.size() == 2 && h.allSinks.get(0).shutdownCount.get() == 1
+                            && h.allSinks.get(1).startCount.get() == 1);
+
+            // 新实例健康：后续 reconcile 不抖动、不重建
+            h.sources.get("src-on").startCount.set(0);
+            Thread.sleep(200);
+            assertEquals(0, h.sources.get("src-on").startCount.get());
+            assertEquals(0, h.sources.get("src-on").shutdownCount.get());
         } finally {
             h.coordinator.shutdown();
         }

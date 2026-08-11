@@ -5,12 +5,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import ravenworks.magpie.common.util.PartitionUtils;
 import ravenworks.magpie.common.util.Uuids;
-import ravenworks.magpie.engine.api.stream.ConsumerRecord;
-import ravenworks.magpie.engine.api.stream.MessageRecord;
-import ravenworks.magpie.engine.api.stream.OffsetTracker;
-import ravenworks.magpie.engine.api.stream.StreamConsumer;
-import ravenworks.magpie.engine.api.stream.StreamDefinition;
-import ravenworks.magpie.engine.api.stream.StreamProducer;
+import ravenworks.magpie.engine.api.stream.*;
 import ravenworks.magpie.testsupport.TestRabbitMq;
 
 import java.nio.charset.StandardCharsets;
@@ -48,6 +43,7 @@ class RabbitStreamIT {
      */
     private static final Map<String, Long> OFFSETS = new ConcurrentHashMap<>();
     private static final OffsetTracker OFFSET_TRACKER = new OffsetTracker() {
+
         @Override
         public long read(String name, int partition) {
             return OFFSETS.getOrDefault(name + ":" + partition, -1L);

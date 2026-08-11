@@ -17,11 +17,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Queue;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -253,7 +249,9 @@ class HttpSourceConnectorTest {
         assertTrue(producer.sent.isEmpty());
     }
 
-    /** send() 不返回失败 future，而是同步抛异常的 producer */
+    /**
+     * send() 不返回失败 future，而是同步抛异常的 producer
+     */
     static class ThrowingStreamProducer implements StreamProducer {
 
         final RuntimeException error = new RuntimeException("sync boom");
@@ -269,9 +267,12 @@ class HttpSourceConnectorTest {
 
     }
 
-    /** 包装事件：额外暴露一个值为 null 的扩展属性 */
+    /**
+     * 包装事件：额外暴露一个值为 null 的扩展属性
+     */
     private static CloudEvent withNullExtension(CloudEvent delegate, String name) {
         return new CloudEvent() {
+
             @Override
             public CloudEventData getData() {
                 return delegate.getData();

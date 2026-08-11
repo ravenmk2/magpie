@@ -47,6 +47,11 @@ class EngineConfigurationTest {
                 electionShutdownCount.incrementAndGet();
                 return CompletableFuture.completedFuture(null);
             }
+
+            @Override
+            public boolean isAlive() {
+                return true;
+            }
         };
         StreamRegistry streamRegistry = new StreamRegistry() {
 
@@ -74,6 +79,11 @@ class EngineConfigurationTest {
             @Override
             public List<StreamConsumer> consumer(StreamDefinition definition, String name) {
                 return List.of();
+            }
+
+            @Override
+            public StreamConsumer consumer(StreamDefinition definition, int partition, String name) {
+                throw new UnsupportedOperationException();
             }
 
             @Override

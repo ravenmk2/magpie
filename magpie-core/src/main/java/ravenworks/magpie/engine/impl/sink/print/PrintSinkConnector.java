@@ -71,6 +71,13 @@ public class PrintSinkConnector implements SinkConnector {
                 .thenRun(() -> log.info("Print sink '{}' shutdown", this.name));
     }
 
+    @Override
+    public boolean isAlive() {
+        // 无内部调谐循环：如实聚合 worker 状态，整体重启交由 Coordinator
+        return !this.workers.isEmpty()
+                && this.workers.stream().allMatch(PrintSinkWorker::isAlive);
+    }
+
 
     private static class PrintSinkWorker {
 
@@ -99,6 +106,10 @@ public class PrintSinkConnector implements SinkConnector {
         CompletableFuture<Void> shutdown() {
             this.stopped = true;
             return this.workLoop.shutdown();
+        }
+
+        boolean isAlive() {
+            return this.workLoop.isAlive();
         }
 
         private void dispatch(Object event) {

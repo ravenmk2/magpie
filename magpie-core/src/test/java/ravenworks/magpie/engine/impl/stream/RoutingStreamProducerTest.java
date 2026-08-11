@@ -1,26 +1,12 @@
 package ravenworks.magpie.engine.impl.stream;
 
 import org.junit.jupiter.api.Test;
-import ravenworks.magpie.engine.api.stream.MessageRecord;
-import ravenworks.magpie.engine.api.stream.SendResult;
-import ravenworks.magpie.engine.api.stream.StreamConsumer;
-import ravenworks.magpie.engine.api.stream.StreamDefinition;
-import ravenworks.magpie.engine.api.stream.StreamProducer;
-import ravenworks.magpie.engine.api.stream.StreamProvider;
-import ravenworks.magpie.engine.api.stream.StreamRegistry;
+import ravenworks.magpie.engine.api.stream.*;
 
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 
 class RoutingStreamProducerTest {
@@ -83,6 +69,7 @@ class RoutingStreamProducerTest {
             streams.put(topic, new StreamDefinition(topic, 1, Map.of()));
         }
         return new StreamRegistry() {
+
             @Override
             public List<StreamDefinition> getStreams() {
                 return List.copyOf(streams.values());
@@ -95,7 +82,9 @@ class RoutingStreamProducerTest {
         };
     }
 
-    /** 记录 producer 创建次数的假 StreamProvider，可按需指定要派发的 producer */
+    /**
+     * 记录 producer 创建次数的假 StreamProvider，可按需指定要派发的 producer
+     */
     private static final class FakeStreamProvider implements StreamProvider {
 
         private final Deque<RecordingProducer> queue = new ArrayDeque<>();
@@ -124,11 +113,20 @@ class RoutingStreamProducerTest {
         }
 
         @Override
+        public StreamConsumer consumer(StreamDefinition definition, int partition, String name) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public void close() {
         }
+
     }
 
-    /** 记录 send/close 调用次数的假 StreamProducer，可配置 close 时抛出异常 */
+
+    /**
+     * 记录 send/close 调用次数的假 StreamProducer，可配置 close 时抛出异常
+     */
     private static final class RecordingProducer implements StreamProducer {
 
         private int sendCount;
@@ -150,6 +148,7 @@ class RoutingStreamProducerTest {
                 throw new RuntimeException("close failed");
             }
         }
+
     }
 
 }

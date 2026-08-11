@@ -185,6 +185,35 @@ class WorkLoopTest {
     }
 
     @Test
+    void isAliveReflectsWorkLoopState() throws Exception {
+        var loop = new WorkLoop("t-alive", 50, e -> {
+        });
+        assertFalse(loop.isAlive(), "not alive before start");
+
+        loop.start();
+        await().atMost(2, TimeUnit.SECONDS).until(() -> loop.getState() == WorkLoopState.RUNNING);
+        assertTrue(loop.isAlive(), "alive when running");
+
+        loop.shutdown().get(2, TimeUnit.SECONDS);
+        assertFalse(loop.isAlive(), "not alive after termination");
+    }
+
+    @Test
+    void isAliveIsFalseAfterHandlerErrorKillsLoop() {
+        var loop = new WorkLoop("t-alive-error", 50, msg -> {
+            if ("boom".equals(msg)) {
+                throw new AssertionError("fatal");
+            }
+        });
+        loop.start();
+        await().atMost(2, TimeUnit.SECONDS).until(loop::isAlive);
+
+        loop.enqueue("boom");
+        await().atMost(2, TimeUnit.SECONDS).until(() -> loop.getState() == WorkLoopState.TERMINATED);
+        assertFalse(loop.isAlive(), "not alive after handler error killed the loop");
+    }
+
+    @Test
     void noopWakeupSignalIsNeverDelivered() throws Exception {
         // shutdown() 用于唤醒阻塞 poll 的 NOOP 哨兵在 dispatch 中被吞掉，不会投递给 handler
         List<Object> received = new CopyOnWriteArrayList<>();

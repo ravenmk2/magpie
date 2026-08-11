@@ -182,6 +182,12 @@ public class RecordingSinkProvider implements SinkProvider {
                     .thenRun(() -> log.info("Recording sink '{}' shutdown", this.name));
         }
 
+        @Override
+        public boolean isAlive() {
+            return !this.workers.isEmpty()
+                    && this.workers.stream().allMatch(SinkWorker::isAlive);
+        }
+
         private SinkWorker createWorker(StreamConsumer consumer) {
             var workerName = this.name + "-" + consumer.partition();
             var cb = new CircuitBreaker(workerName,

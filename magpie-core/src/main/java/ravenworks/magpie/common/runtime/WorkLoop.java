@@ -44,6 +44,15 @@ public class WorkLoop implements Lifecycle {
         return this.state.get();
     }
 
+    /**
+     * RUNNING 与 SHUTTING_DOWN（停机排空仍在工作、有界）视为存活。
+     */
+    @Override
+    public boolean isAlive() {
+        var s = this.state.get();
+        return s == WorkLoopState.RUNNING || s == WorkLoopState.SHUTTING_DOWN;
+    }
+
     @Override
     public void start() {
         if (this.state.compareAndSet(WorkLoopState.NOT_STARTED, WorkLoopState.RUNNING)) {

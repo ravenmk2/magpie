@@ -8,11 +8,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
 import ravenworks.magpie.common.util.Uuids;
-import ravenworks.magpie.engine.api.stream.ConsumerRecord;
-import ravenworks.magpie.engine.api.stream.OffsetTracker;
-import ravenworks.magpie.engine.api.stream.StreamConsumer;
-import ravenworks.magpie.engine.api.stream.StreamDefinition;
-import ravenworks.magpie.engine.api.stream.StreamProducer;
+import ravenworks.magpie.engine.api.stream.*;
 import ravenworks.magpie.engine.impl.rabbitmq.RabbitStreamProvider;
 import ravenworks.magpie.testsupport.TestMySql;
 import ravenworks.magpie.testsupport.TestRabbitMq;
@@ -49,6 +45,7 @@ class MySqlPollSourceIT {
 
     private static final Map<String, Long> OFFSETS = new ConcurrentHashMap<>();
     private static final OffsetTracker OFFSET_TRACKER = new OffsetTracker() {
+
         @Override
         public long read(String name, int partition) {
             return OFFSETS.getOrDefault(name + ":" + partition, -1L);
@@ -161,15 +158,15 @@ class MySqlPollSourceIT {
                                                          int readLag) {
         return new MySqlPollSourceConnector(
                 producer, name, Map.of(
-                        "url", dataSource.getUrl(),
-                        "username", dataSource.getUsername(),
-                        "password", dataSource.getPassword(),
-                        "tableName", TABLE,
-                        "batchSize", 100,
-                        "pollInterval", pollInterval,
-                        "readLag", readLag,
-                        "sendTimeout", 10000,
-                        "sendStrategy", "ordered"));
+                "url", dataSource.getUrl(),
+                "username", dataSource.getUsername(),
+                "password", dataSource.getPassword(),
+                "tableName", TABLE,
+                "batchSize", 100,
+                "pollInterval", pollInterval,
+                "readLag", readLag,
+                "sendTimeout", 10000,
+                "sendStrategy", "ordered"));
     }
 
     private static void insertOutboxRows(String topic, LocalDateTime firstCreatedAt, int count)
