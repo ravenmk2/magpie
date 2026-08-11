@@ -209,6 +209,8 @@ public class SinkWorker implements Lifecycle {
     /**
      * 提交已处置水位（无进展则空转）。提交来源只有 committableOffset——
      * 它只随 Deliverer 返回的水位前进，天然不越过未投递/未落库的缺口。
+     * 提交失败（如 Stream/DB 瞬断）只记日志并跳过本次：内存态不回退，
+     * 下个周期带着相同或更大的水位自然重试；停机路径同理，不阻断停机。
      */
     private void commitOffset() {
         long watermark = this.committableOffset;
@@ -216,7 +218,12 @@ public class SinkWorker implements Lifecycle {
             return;
         }
         log.debug("[{}] committing offset {}", this.name, watermark);
-        this.consumer.commit(watermark);
+        try {
+            this.consumer.commit(watermark);
+        } catch (Exception e) {
+            log.error("[{}] failed to commit offset {}, skipped", this.name, watermark, e);
+            return;
+        }
         this.committedOffset = watermark;
         this.lastCommitAt = System.currentTimeMillis();
     }

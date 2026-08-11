@@ -35,7 +35,9 @@ class SinkWorkerTest {
         final AtomicBoolean started = new AtomicBoolean();
         final AtomicBoolean stopped = new AtomicBoolean();
         final AtomicBoolean failFatally = new AtomicBoolean();
+        final AtomicBoolean failCommits = new AtomicBoolean();
         final AtomicInteger pollCount = new AtomicInteger();
+        final AtomicInteger commitAttempts = new AtomicInteger();
         final List<Long> commits = new CopyOnWriteArrayList<>();
 
         void offer(List<ConsumerRecord> batch) {
@@ -69,6 +71,10 @@ class SinkWorkerTest {
 
         @Override
         public void commit(long offset) {
+            this.commitAttempts.incrementAndGet();
+            if (this.failCommits.get()) {
+                throw new RuntimeException("simulated commit failure");
+            }
             this.commits.add(offset);
         }
 
@@ -245,6 +251,43 @@ class SinkWorkerTest {
         } finally {
             h.shutdown();
         }
+    }
+
+    @Test
+    void failedCommitIsSkippedAndRetriedWithLatestWatermark() throws Exception {
+        var h = new Harness(50);
+        h.consumer.failCommits.set(true);
+        try {
+            h.worker.start();
+            h.consumer.offer(List.of(record(0), record(1), record(2)));
+            h.awaitDelivered(1);
+
+            // 提交抛异常被吞掉记日志：worker 线程存活，拉取与投递继续
+            await().atMost(2, TimeUnit.SECONDS).until(() -> h.consumer.commitAttempts.get() > 0);
+            h.consumer.offer(List.of(record(3), record(4)));
+            h.awaitDelivered(2);
+            assertTrue(h.worker.isAlive());
+            assertTrue(h.consumer.commits.isEmpty());
+
+            // 恢复后下个周期用最新水位（4，而非失败时的 2）重试成功
+            h.consumer.failCommits.set(false);
+            await().atMost(2, TimeUnit.SECONDS).until(() -> h.consumer.commits.equals(List.of(4L)));
+        } finally {
+            h.shutdown();
+        }
+    }
+
+    @Test
+    void shutdownCommitFailureDoesNotBlockShutdown() throws Exception {
+        var h = new Harness(60_000);
+        h.consumer.failCommits.set(true);
+        h.worker.start();
+        h.consumer.offer(List.of(record(0), record(1)));
+        h.awaitDelivered(1);
+
+        // 停机路径（PRE_SHUTDOWN）的提交失败只记日志：shutdown 正常完成且 consumer 被停止
+        h.worker.shutdown().get(2, TimeUnit.SECONDS);
+        assertTrue(h.consumer.stopped.get());
     }
 
     @Test
