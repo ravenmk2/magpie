@@ -20,7 +20,7 @@ public class WorkLoop implements Lifecycle {
 
     private static final Object NOOP = new Object();
 
-    private final AtomicReference<WorkLoopState> state = new AtomicReference<>(WorkLoopState.NEW);
+    private final AtomicReference<WorkLoopState> state = new AtomicReference<>(WorkLoopState.NOT_STARTED);
     private final BlockingQueue<Object> queue = new LinkedBlockingQueue<>();
     private final CompletableFuture<Void> termination;
 
@@ -46,24 +46,24 @@ public class WorkLoop implements Lifecycle {
 
     @Override
     public void start() {
-        if (this.state.compareAndSet(WorkLoopState.NEW, WorkLoopState.RUNNING)) {
+        if (this.state.compareAndSet(WorkLoopState.NOT_STARTED, WorkLoopState.RUNNING)) {
             this.thread = Thread.ofVirtual()
                     .name(this.name)
                     .start(this::run);
             return;
         }
-        throw new IllegalStateException("Work loop is not in NEW state: " + this.state.get());
+        throw new IllegalStateException("Work loop is not in NOT_STARTED state: " + this.state.get());
     }
 
     @Override
     public CompletableFuture<Void> shutdown() {
         var prev = this.state.getAndUpdate(s -> switch (s) {
-            case NEW -> WorkLoopState.TERMINATED;
+            case NOT_STARTED -> WorkLoopState.TERMINATED;
             case RUNNING -> WorkLoopState.SHUTTING_DOWN;
             default -> s;
         });
         switch (prev) {
-            case NEW -> this.termination.complete(null);
+            case NOT_STARTED -> this.termination.complete(null);
             case RUNNING -> {
                 log.info("{} - Work loop shutdown requested", this.name);
                 this.queue.add(NOOP);

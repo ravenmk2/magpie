@@ -6,7 +6,7 @@ package ravenworks.magpie.common.runtime;
  */
 public enum WorkLoopState {
 
-    NEW,
+    NOT_STARTED,
     RUNNING,
     SHUTTING_DOWN,
     TERMINATED
