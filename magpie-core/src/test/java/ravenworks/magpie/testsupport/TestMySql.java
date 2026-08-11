@@ -11,6 +11,7 @@ import javax.sql.DataSource;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.List;
 
 
@@ -31,7 +32,9 @@ public final class TestMySql {
     private static final Path SCHEMA_SQL = Path.of("..", "docs", "database", "schema.sql");
 
     private static final MySQLContainer<?> CONTAINER =
-            new MySQLContainer<>(DockerImageName.parse("mysql:8.4"));
+            new MySQLContainer<>(DockerImageName.parse("mysql:8.4"))
+                    // 慢速/高负载 Docker 宿主机上首次初始化可能超过默认 60s
+                    .withStartupTimeout(Duration.ofMinutes(5));
 
     private static boolean schemaInitialized;
 

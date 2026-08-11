@@ -1,5 +1,7 @@
 package ravenworks.magpie.server;
 
+import com.rabbitmq.stream.Environment;
+import com.rabbitmq.stream.NoOffsetException;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -17,6 +19,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.utility.DockerImageName;
+import ravenworks.magpie.engine.impl.rabbitmq.RabbitUtils;
 import ravenworks.magpie.server.dto.ErrorResponse;
 
 import java.nio.file.Path;
@@ -40,7 +43,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * magpie_topic.name，因此播种的 topic 名、allowedTopics、subject 必须一致。
  *
  * <p>容器采用手工 start 的 singleton 模式（与 magpie-core 的 TestMySql/TestRabbitMq 一致），
- * Coordinator reconcile 节拍 5s（Coordinator.DEFAULT_RESYNC_INTERVAL_MS），
+ * Coordinator reconcile 节拍 10s（Coordinator.DEFAULT_RESYNC_INTERVAL_MS），
  * 所有等待一律用 Awaitility，不 sleep。
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -58,6 +61,18 @@ class ServerE2eIT {
     private static final String TOPIC = "server-e2e-orders";
     private static final String SOURCE = "server-e2e-http";
     private static final String TARGET = "server-e2e-print";
+
+    /**
+     * 生命周期用例专用：禁启 source 观察退订，与主播种数据隔离
+     */
+    private static final String TOGGLE_TOPIC = "server-e2e-toggle";
+    private static final String TOGGLE_SOURCE = "server-e2e-toggle-http";
+
+    /**
+     * 发送失败用例专用：删除 topic 行让路由失败，与主播种数据隔离
+     */
+    private static final String BROKEN_TOPIC = "server-e2e-broken";
+    private static final String BROKEN_SOURCE = "server-e2e-broken-http";
 
     private static final MySQLContainer<?> MYSQL =
             new MySQLContainer<>(DockerImageName.parse("mysql:8.4"));
@@ -174,7 +189,129 @@ class ServerE2eIT {
     }
 
     /**
-     * source 由 Coordinator 按 5s 节拍 reconcile 后才挂到 router；轮询探针发布直到
+     * 入口校验（HttpSourceConnector.validateFieldLengths）：字段超长绝不截断、直接拒，
+     * InvalidMessageException → 400 invalid_message_error。
+     */
+    @Test
+    void overlongFieldsRejected() {
+        awaitSourceReady();
+
+        // id 上限 32（magpie_message_log.message_id CHAR(32)）
+        ResponseEntity<ErrorResponse> badId = postStructured(SOURCE, TOPIC, "a".repeat(33), null,
+                "{\"orderId\":\"o-bad-id\"}", ErrorResponse.class);
+        assertEquals(HttpStatus.BAD_REQUEST, badId.getStatusCode());
+        assertNotNull(badId.getBody());
+        assertEquals("invalid_message_error", badId.getBody().error());
+        assertTrue(badId.getBody().message().contains("'id'"),
+                "expected field name in message, got: " + badId.getBody().message());
+
+        // businessKey 上限 256（magpie_message_log.business_key VARCHAR(256)）
+        ResponseEntity<ErrorResponse> badKey = postStructured(SOURCE, TOPIC, id32(), "b".repeat(257),
+                "{\"orderId\":\"o-bad-key\"}", ErrorResponse.class);
+        assertEquals(HttpStatus.BAD_REQUEST, badKey.getStatusCode());
+        assertNotNull(badKey.getBody());
+        assertEquals("invalid_message_error", badKey.getBody().error());
+        assertTrue(badKey.getBody().message().contains("'xbusinesskey'"),
+                "expected field name in message, got: " + badKey.getBody().message());
+    }
+
+    /**
+     * source 注销生命周期：未注册 → 503 no_subscriber_error；播种挂上后 200；
+     * is_enabled=0 经 reconcile 退役后再次 503（退订真实生效，而不是仍 200 静默丢消息）。
+     */
+    @Test
+    void sourceDeregistrationReturns503() {
+        // 从未播种的 source：router 无订阅者
+        ResponseEntity<ErrorResponse> unknown = postStructured("server-e2e-ghost", TOPIC, id32(), null,
+                "{\"orderId\":\"o-4\"}", ErrorResponse.class);
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, unknown.getStatusCode());
+        assertNotNull(unknown.getBody());
+        assertEquals("no_subscriber_error", unknown.getBody().error());
+
+        // 播种专用 source/topic，等 reconcile 挂上 router 后 200
+        seedTopicAndSource(TOGGLE_TOPIC, TOGGLE_SOURCE);
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(60))
+                .pollInterval(Duration.ofSeconds(1))
+                .untilAsserted(() -> {
+                    ResponseEntity<String> ok = postStructured(TOGGLE_SOURCE, TOGGLE_TOPIC, id32(), null,
+                            "{\"orderId\":\"o-5\"}", String.class);
+                    assertEquals(HttpStatus.OK, ok.getStatusCode());
+                });
+
+        // 禁用后经 reconcile 退订，再发布应为 503 而非 200 静默丢失
+        this.jdbc.update("UPDATE magpie_source SET is_enabled = 0 WHERE name = ?", TOGGLE_SOURCE);
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(60))
+                .pollInterval(Duration.ofSeconds(1))
+                .untilAsserted(() -> {
+                    ResponseEntity<ErrorResponse> gone = postStructured(TOGGLE_SOURCE, TOGGLE_TOPIC, id32(), null,
+                            "{\"orderId\":\"o-6\"}", ErrorResponse.class);
+                    assertEquals(HttpStatus.SERVICE_UNAVAILABLE, gone.getStatusCode());
+                    assertNotNull(gone.getBody());
+                    assertEquals("no_subscriber_error", gone.getBody().error());
+                });
+    }
+
+    /**
+     * stream 发送失败 → 502 publish_failed_error，且消息确实没落 stream。
+     *
+     * <p>失败注入：删除 magpie_topic 行。RoutingStreamProducer.send 每次经 StreamRegistry
+     * 实时查库，行没了即抛 IllegalArgumentException("Unknown topic")，在触碰 broker 前失败；
+     * 该 topic 从未成功发布过，producer 缓存为空，失败不受 reconcile 节拍影响（reconcile 只按
+     * DB 行建 stream，不会恢复被删的行），在等待窗口内稳定。
+     */
+    @Test
+    void streamSendFailureReturns502() {
+        seedTopicAndSource(BROKEN_TOPIC, BROKEN_SOURCE);
+        String streamName = RabbitUtils.streamQueueName(BROKEN_TOPIC, 0);
+
+        String uri = "rabbitmq-stream://"
+                + RABBITMQ.getAdminUsername() + ":" + RABBITMQ.getAdminPassword()
+                + "@" + RABBITMQ.getHost() + ":" + RABBITMQ.getMappedPort(STREAM_PORT) + "/%2f";
+        try (Environment environment = Environment.builder().uri(uri).build()) {
+            // 等 Coordinator 把 broker 侧 stream 建出来，证明后续「没落 stream」断言
+            // 针对的是真实存在的 stream，而非「stream 本就不存在」
+            Awaitility.await()
+                    .atMost(Duration.ofSeconds(60))
+                    .pollInterval(Duration.ofSeconds(1))
+                    .untilAsserted(() -> assertTrue(environment.streamExists(streamName),
+                            "expected stream " + streamName + " to be created by Coordinator"));
+            long committedBefore = committedOffsetOrEmpty(environment, streamName);
+
+            this.jdbc.update("DELETE FROM magpie_topic WHERE name = ?", BROKEN_TOPIC);
+
+            // source 挂上 router 前是 503，挂上后路由失败稳定为 502；轮询同时覆盖两个收敛
+            Awaitility.await()
+                    .atMost(Duration.ofSeconds(60))
+                    .pollInterval(Duration.ofSeconds(1))
+                    .untilAsserted(() -> {
+                        ResponseEntity<ErrorResponse> failed = postStructured(BROKEN_SOURCE, BROKEN_TOPIC,
+                                id32(), null, "{\"orderId\":\"o-7\"}", ErrorResponse.class);
+                        assertEquals(HttpStatus.BAD_GATEWAY, failed.getStatusCode());
+                        assertNotNull(failed.getBody());
+                        assertEquals("publish_failed_error", failed.getBody().error());
+                    });
+
+            // 发送在路由阶段即失败，broker 侧 committed offset 不得有变化
+            assertEquals(committedBefore, committedOffsetOrEmpty(environment, streamName),
+                    "no message should have landed in stream " + streamName);
+        }
+    }
+
+    /**
+     * stream 的 committed offset；空 stream 时 queryStreamStats 抛 NoOffsetException，归一为 -1
+     */
+    private static long committedOffsetOrEmpty(Environment environment, String streamName) {
+        try {
+            return environment.queryStreamStats(streamName).committedOffset();
+        } catch (NoOffsetException e) {
+            return -1;
+        }
+    }
+
+    /**
+     * source 由 Coordinator 按 10s 节拍 reconcile 后才挂到 router；轮询探针发布直到
      * 拿到 200（全链路打通），不 sleep。探针消息本身也会落 stream，不影响断言。
      */
     private void awaitSourceReady() {
@@ -192,20 +329,38 @@ class ServerE2eIT {
     }
 
     private <T> ResponseEntity<T> postStructured(String subject, String dataJson, Class<T> responseType) {
+        return postStructured(SOURCE, subject, id32(), null, dataJson, responseType);
+    }
+
+    private <T> ResponseEntity<T> postStructured(String source, String subject, String id,
+                                                 String businessKey, String dataJson, Class<T> responseType) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.parseMediaType("application/cloudevents+json"));
+        String businessKeyAttribute = businessKey != null
+                ? ",\n  \"xbusinesskey\": \"" + businessKey + "\""
+                : "";
         String body = """
                 {
                   "specversion": "1.0",
                   "id": "%s",
                   "source": "server-e2e-test",
                   "type": "com.example.OrderCreated",
-                  "subject": "%s",
+                  "subject": "%s"%s,
                   "datacontenttype": "application/json",
                   "data": %s
                 }
-                """.formatted(id32(), subject, dataJson);
-        return this.rest.postForEntity("/api/v1/publish/" + SOURCE, new HttpEntity<>(body, headers), responseType);
+                """.formatted(id, subject, businessKeyAttribute, dataJson);
+        return this.rest.postForEntity("/api/v1/publish/" + source, new HttpEntity<>(body, headers), responseType);
+    }
+
+    /**
+     * 播种一对专用 http source / topic（与 @BeforeAll 的主播种数据隔离），供生命周期类用例使用
+     */
+    private void seedTopicAndSource(String topic, String source) {
+        this.jdbc.update("INSERT INTO magpie_topic (id, name, partitions, properties) VALUES (?, ?, ?, ?)",
+                id32(), topic, 1, "{}");
+        this.jdbc.update("INSERT INTO magpie_source (id, type, name, is_enabled, properties) VALUES (?, ?, ?, ?, ?)",
+                id32(), "http", source, 1, "{\"allowedTopics\":[\"" + topic + "\"]}");
     }
 
     private static String id32() {

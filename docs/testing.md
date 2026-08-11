@@ -28,16 +28,23 @@
 
 现有 IT：
 
-- `engine/impl/rabbitmq/RabbitStreamIT` — send/poll 往返、offset 提交语义（未提交重启重投、已提交不重投）
+- `engine/impl/rabbitmq/RabbitStreamIT` — send/poll 往返、offset 提交语义（未提交重启重投、已提交不重投）、
+  flow credit 补给边界（消息数越过初始 credit）、stream create 幂等语义、Single Active Consumer 单活与接管
 - `domain/repository/LeaderLockRepositoryIT` — Leader 锁条件 UPDATE 的抢锁/续约/释放/过期接管
 - `engine/impl/election/LeaderElectionImplIT` — 选举生命周期（抢锁、事件、优雅关停放锁、重新接管）
 - `engine/impl/runtime/CoordinatorE2eIT` — 引擎级 e2e：真实 Coordinator + Stream + DB，
   录制 Sink 断言三种 DeliveryMode 的顺序/失败隔离/重试排空，以及重启后 RetryStore 存量排空
+- `engine/impl/runtime/CoordinatorCrashRecoveryIT` — 崩溃（非优雅停机，直接关 RabbitMQ Environment）
+  恢复：未提交 offset 重投 × RetryStore 排空的交互；target 动态禁用/启用时真实 consumer
+  建拆与从 committed offset 续传（禁用期零投递、重启用恰好补收积压、无全量重放）
 - `engine/impl/source/mysql/MySqlPollSourceIT` — MySQL Source outbox 轮询（用
-  `docs/database/source-mysql.sql` 建表）：行按 (created_at, id) 序入 stream 并删除、readLag 生效
+  `docs/database/source-mysql.sql` 建表）：行按 (created_at, id) 序入 stream 并删除、readLag 生效、
+  发送后删除前宕机的跨实例续传（端到端 at-least-once 重复）、未提交事务行对 poller 不可见
+  （含 DB 默认 `CURRENT_TIMESTAMP(3)` 路径）
 - `server/ServerE2eIT`（magpie-server）— `@SpringBootTest` 随机端口 + 模块内自起 Testcontainers
   （core 测试基建不跨模块），POST CloudEvent 全链路冒烟：structured/binary 两种绑定、
-  非法 topic 403、print sink 消费后 offset 提交
+  非法 topic 403、print sink 消费后 offset 提交，以及失败契约：字段超长 400、
+  source 注销后 503、stream 发送失败 502
 
 ## 运行环境
 
