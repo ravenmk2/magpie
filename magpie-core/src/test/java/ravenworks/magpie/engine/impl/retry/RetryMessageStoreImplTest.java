@@ -57,10 +57,12 @@ class RetryMessageStoreImplTest {
     }
 
     @Test
-    void longMessageIdIsTruncatedTo32() {
-        var id = RetryMessageStoreImpl.normalizeMessageId("x".repeat(40));
-        assertEquals(32, id.length());
-        assertEquals("x".repeat(32), id);
+    void longMessageIdThrows() {
+        var longId = "x".repeat(40);
+        var ex = assertThrows(IllegalArgumentException.class,
+                () -> RetryMessageStoreImpl.normalizeMessageId(longId));
+        // 错误信息含完整 id，便于排障
+        assertTrue(ex.getMessage().contains(longId), "unexpected message: " + ex.getMessage());
     }
 
     @Test

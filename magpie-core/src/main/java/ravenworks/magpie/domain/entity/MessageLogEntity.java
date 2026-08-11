@@ -23,19 +23,19 @@ public class MessageLogEntity implements Serializable {
     @Column(name = "message_id", nullable = false, length = 32)
     private String messageId;
 
-    @Column(name = "type", nullable = false, length = 128)
+    @Column(name = "type", nullable = false, length = 256)
     private String type;
 
     @Column(name = "event_time", nullable = false)
     private LocalDateTime eventTime;
 
-    @Column(name = "topic", nullable = false, length = 128)
+    @Column(name = "topic", nullable = false, length = 256)
     private String topic;
 
-    @Column(name = "tenant_id", nullable = false, length = 64)
+    @Column(name = "tenant_id", nullable = false, length = 256)
     private String tenantId;
 
-    @Column(name = "business_key", nullable = false, length = 128)
+    @Column(name = "business_key", nullable = false, length = 256)
     private String businessKey;
 
     @Column(name = "headers", nullable = false, columnDefinition = "JSON")

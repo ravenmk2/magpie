@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.*;
 import ravenworks.magpie.engine.api.source.http.HttpSourceRouter;
+import ravenworks.magpie.engine.api.source.http.InvalidMessageException;
 import ravenworks.magpie.engine.api.source.http.NoSubscriberException;
 import ravenworks.magpie.engine.api.source.http.TopicNotAllowedException;
 import ravenworks.magpie.server.dto.ErrorResponse;
@@ -56,6 +57,9 @@ public class PublishController {
         if (cause instanceof TopicNotAllowedException) {
             status = HttpStatus.FORBIDDEN;
             code = "topic_not_allowed_error";
+        } else if (cause instanceof InvalidMessageException) {
+            status = HttpStatus.BAD_REQUEST;
+            code = "invalid_message_error";
         } else if (cause instanceof NoSubscriberException) {
             status = HttpStatus.SERVICE_UNAVAILABLE;
             code = "no_subscriber_error";

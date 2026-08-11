@@ -33,7 +33,7 @@ public class RetryMessageEntity implements Serializable {
     @Column(name = "retry_at", nullable = false)
     private LocalDateTime retryAt;
 
-    @Column(name = "business_key", nullable = false, length = 128)
+    @Column(name = "business_key", nullable = false, length = 256)
     private String businessKey;
 
     @Version

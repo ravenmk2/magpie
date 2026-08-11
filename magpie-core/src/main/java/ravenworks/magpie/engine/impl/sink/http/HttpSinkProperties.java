@@ -37,6 +37,12 @@ public class HttpSinkProperties {
     @JsonProperty("retry.emptyPollThreshold")
     private int emptyPollThreshold = 3;
 
+    /**
+     * 重试落库失败时原地重试的间隔（ms）
+     */
+    @JsonProperty("retry.persistDelay")
+    private long persistRetryDelayMs = 1000;
+
     @JsonProperty("retry.statusCodes")
     private String retryStatusCodesStr = "500-599,408,429";
 

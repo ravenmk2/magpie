@@ -26,6 +26,7 @@ class HttpSinkPropertiesTest {
         assertEquals(100, props.getBatchSize());
         assertEquals(30_000, props.getCommitInterval());
         assertEquals("ORDERED", props.getDeliveryMode());
+        assertEquals(1_000, props.getPersistRetryDelayMs());
         assertEquals(102, props.getRetryStatusCodes().size());
         assertTrue(props.getRetryStatusCodes().containsAll(Set.of(408, 429, 500, 599)));
         assertFalse(props.getRetryStatusCodes().contains(499));

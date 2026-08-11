@@ -1,6 +1,7 @@
 -- MySQL Source 轮询 outbox 表。
 -- 投递按 (created_at, id) 升序；轮询只处理 created_at 早于 now - readLag 的行，
--- 因此业务事务从 INSERT 到 COMMIT 的时长必须小于连接器的 readLag 配置（默认 500ms），
+-- 因此业务事务从 INSERT 到 COMMIT 的时长必须小于连接器的 readLag 配置（默认 500ms）。
+-- id 约定 ≤32 字符（uuid7 hex），由 CHAR(32) 强制：超长 INSERT 直接报错，绝不截断。
 CREATE TABLE IF NOT EXISTS `magpie_outbox_message`
 (
     `id`           CHAR(32)     NOT NULL COMMENT 'ID',

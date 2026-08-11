@@ -50,8 +50,10 @@ public class RetryMessageStoreImpl implements RetryMessageStore {
     }
 
     /**
-     * 落库前对记录做归一化：数据库列均为 NOT NULL（message_id 为 CHAR(32)），
-     * 任何空值/超长都不能让重试落库本身失败——那会把安全网变成毒消息源。
+     * 落库前对记录做归一化：数据库列均为 NOT NULL，空值一律归一（nullToEmpty/默认值），
+     * 不能让重试落库本身失败——那会把安全网变成毒消息源。message_id 例外：约定 ≤32 字符
+     * （CHAR(32)），缺失时生成新 id，超长时硬失败（绝不截断）——入口已做边界校验，
+     * 走到这里说明存在绕过入口的写入路径，必须暴露而非掩盖。
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -105,14 +107,19 @@ public class RetryMessageStoreImpl implements RetryMessageStore {
     }
 
     /**
-     * message_id 约定为 32 字符 uuid7 hex：缺失时生成新 id，超长时截断，
-     * 保证总能落入 magpie_message_log.message_id (CHAR(32))。
+     * message_id 约定 ≤32 字符（magpie_message_log.message_id 为 CHAR(32)）：
+     * 缺失/空白时生成新 uuid7；超长抛 IllegalArgumentException——绝不截断，
+     * 截断会让两条不同消息共享同一 message_id，破坏业务关联与排障。
      */
     static String normalizeMessageId(String id) {
         if (id == null || id.isBlank()) {
             return Uuids.uuid7Hex();
         }
-        return id.length() <= 32 ? id : id.substring(0, 32);
+        if (id.length() > 32) {
+            throw new IllegalArgumentException(
+                    "message id exceeds 32 chars (" + id.length() + "): " + id);
+        }
+        return id;
     }
 
     static String nullToEmpty(String value) {

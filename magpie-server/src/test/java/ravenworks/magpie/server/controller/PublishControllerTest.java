@@ -8,14 +8,17 @@ import org.springframework.http.HttpInputMessage;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
-import ravenworks.magpie.engine.api.source.http.HttpMessageContext;
-import ravenworks.magpie.engine.api.source.http.HttpSourceRouter;
-import ravenworks.magpie.engine.api.source.http.NoSubscriberException;
-import ravenworks.magpie.engine.api.source.http.TopicNotAllowedException;
+import ravenworks.magpie.engine.api.source.http.*;
+import ravenworks.magpie.engine.api.stream.MessageRecord;
+import ravenworks.magpie.engine.api.stream.SendResult;
+import ravenworks.magpie.engine.api.stream.StreamProducer;
+import ravenworks.magpie.engine.impl.source.http.HttpSourceConnector;
+import ravenworks.magpie.engine.impl.source.http.HttpSourceRouterImpl;
 import ravenworks.magpie.server.dto.ErrorResponse;
 
 import java.io.InputStream;
 import java.net.URI;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -138,6 +141,97 @@ class PublishControllerTest {
         ErrorResponse body = assertInstanceOf(ErrorResponse.class, response.getBody());
         assertEquals("publish_failed_error", body.error());
         assertEquals("bare", body.message());
+    }
+
+    @Test
+    void invalidMessageMapsToBadRequest() {
+        var controller = new PublishController(
+                failingRouter(new InvalidMessageException("xbusinesskey", 257, 256)));
+
+        ResponseEntity<Object> response = controller.publish("orders", EVENT).join();
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        ErrorResponse body = assertInstanceOf(ErrorResponse.class, response.getBody());
+        assertEquals("invalid_message_error", body.error());
+        assertNotNull(body.message());
+    }
+
+    /**
+     * 真实路由 + 真实 HTTP source 连接器接线的端到端入口校验：
+     * 超长字段在 publish 进入 stream 前被拒绝，映射为 400。
+     */
+    private static PublishController wiredController() {
+        var router = new HttpSourceRouterImpl();
+        var connector = new HttpSourceConnector(router, new FakeStreamProducer(), "src",
+                Map.of("allowedTopics", List.of("*")));
+        connector.start();
+        return new PublishController(router);
+    }
+
+    static class FakeStreamProducer implements StreamProducer {
+
+        @Override
+        public CompletableFuture<SendResult> send(MessageRecord record) {
+            return CompletableFuture.completedFuture(
+                    new SendResult().setSucceeded(true).setMessage(record));
+        }
+
+        @Override
+        public void close() {
+        }
+
+    }
+
+    @Test
+    void oversizedIdMapsToBadRequest() {
+        var controller = wiredController();
+        var event = CloudEventBuilder.v1()
+                .withId("i".repeat(33))
+                .withType("test.event")
+                .withSource(URI.create("https://example.com/source"))
+                .withSubject("orders")
+                .build();
+
+        ResponseEntity<Object> response = controller.publish("src", event).join();
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        ErrorResponse body = assertInstanceOf(ErrorResponse.class, response.getBody());
+        assertEquals("invalid_message_error", body.error());
+    }
+
+    @Test
+    void oversizedBusinessKeyMapsToBadRequest() {
+        var controller = wiredController();
+        var event = CloudEventBuilder.v1()
+                .withId("0123456789abcdef0123456789abcdef")
+                .withType("test.event")
+                .withSource(URI.create("https://example.com/source"))
+                .withSubject("orders")
+                .withExtension("xbusinesskey", "b".repeat(257))
+                .build();
+
+        ResponseEntity<Object> response = controller.publish("src", event).join();
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        ErrorResponse body = assertInstanceOf(ErrorResponse.class, response.getBody());
+        assertEquals("invalid_message_error", body.error());
+    }
+
+    @Test
+    void boundaryLengthsAreAccepted() {
+        // 边界值：id 恰好 32、type/businessKey 恰好 256，放行并正常发布
+        var controller = wiredController();
+        var event = CloudEventBuilder.v1()
+                .withId("0123456789abcdef0123456789abcdef")
+                .withType("t".repeat(256))
+                .withSource(URI.create("https://example.com/source"))
+                .withSubject("orders")
+                .withExtension("xbusinesskey", "b".repeat(256))
+                .build();
+
+        ResponseEntity<Object> response = controller.publish("src", event).join();
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
     }
 
     @Test

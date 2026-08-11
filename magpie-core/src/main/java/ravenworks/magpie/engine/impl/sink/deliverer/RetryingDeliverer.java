@@ -45,11 +45,20 @@ public abstract class RetryingDeliverer implements Deliverer {
     private static final long RETRY_DELAY_MS = 5_000;
     private static final long RETRY_MAX_DELAY_MS = 300_000;
 
+    /**
+     * 落库失败原地重试的默认间隔
+     */
+    private static final Duration DEFAULT_PERSIST_RETRY_DELAY = Duration.ofSeconds(1);
+
     protected final String name;
     protected final SinkHandler handler;
     protected final int batchSize;
     protected final CircuitBreaker circuitBreaker;
     protected final RetryMessageStore retryStore;
+    /**
+     * 落库失败原地重试的间隔
+     */
+    protected final Duration persistRetryDelay;
 
     protected boolean hasRetryable;
     /**
@@ -66,11 +75,21 @@ public abstract class RetryingDeliverer implements Deliverer {
                                 int batchSize,
                                 @NonNull CircuitBreaker circuitBreaker,
                                 @NonNull RetryMessageStore retryStore) {
+        this(name, handler, batchSize, circuitBreaker, retryStore, DEFAULT_PERSIST_RETRY_DELAY);
+    }
+
+    protected RetryingDeliverer(@NonNull String name,
+                                @NonNull SinkHandler handler,
+                                int batchSize,
+                                @NonNull CircuitBreaker circuitBreaker,
+                                @NonNull RetryMessageStore retryStore,
+                                @NonNull Duration persistRetryDelay) {
         this.name = name;
         this.handler = handler;
         this.batchSize = batchSize;
         this.circuitBreaker = circuitBreaker;
         this.retryStore = retryStore;
+        this.persistRetryDelay = persistRetryDelay;
     }
 
     @Override
@@ -199,9 +218,9 @@ public abstract class RetryingDeliverer implements Deliverer {
     }
 
     /**
-     * 失败消息落库：先落库再推进水位（最少一次）。落库失败原地重试直到成功；
-     * 停机中（interrupt 后）放弃并抛出——deliver 随之中断、水位不推进不返回，
-     * 该消息既不投递也未落库，等重启从未提交 offset 重投。
+     * 失败消息落库：先落库再推进水位（最少一次）。落库失败按 persistRetryDelay
+     * 原地重试直到成功；停机中（interrupt 后）放弃并抛出——deliver 随之中断、
+     * 水位不推进不返回，该消息既不投递也未落库，等重启从未提交 offset 重投。
      * 落库成功即标记可重试且立即到期（新条目 retryAt 为 now，同 key 押后除外）。
      */
     protected void persist(ConsumerRecord record) {
@@ -215,9 +234,9 @@ public abstract class RetryingDeliverer implements Deliverer {
                 if (this.shutdownRequested) {
                     throw e;
                 }
-                log.warn("[{}] save retry message failed (offset={}), retry in 1s: {}",
-                        this.name, record.getOffset(), e.toString());
-                LockSupport.parkNanos(1_000_000_000L);
+                log.warn("[{}] save retry message failed (offset={}), retry in {}ms: {}",
+                        this.name, record.getOffset(), this.persistRetryDelay.toMillis(), e.toString());
+                LockSupport.parkNanos(this.persistRetryDelay.toNanos());
             }
         }
     }

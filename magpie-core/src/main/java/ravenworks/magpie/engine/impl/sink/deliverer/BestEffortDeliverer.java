@@ -9,6 +9,7 @@ import ravenworks.magpie.engine.api.sink.SinkResult;
 import ravenworks.magpie.engine.api.sink.SinkStatus;
 import ravenworks.magpie.engine.api.stream.ConsumerRecord;
 
+import java.time.Duration;
 import java.util.List;
 
 
@@ -26,6 +27,15 @@ public class BestEffortDeliverer extends RetryingDeliverer {
                                @NonNull CircuitBreaker circuitBreaker,
                                @NonNull RetryMessageStore retryStore) {
         super(name, handler, batchSize, circuitBreaker, retryStore);
+    }
+
+    public BestEffortDeliverer(@NonNull String name,
+                               @NonNull SinkHandler handler,
+                               int batchSize,
+                               @NonNull CircuitBreaker circuitBreaker,
+                               @NonNull RetryMessageStore retryStore,
+                               @NonNull Duration persistRetryDelay) {
+        super(name, handler, batchSize, circuitBreaker, retryStore, persistRetryDelay);
     }
 
     @Override

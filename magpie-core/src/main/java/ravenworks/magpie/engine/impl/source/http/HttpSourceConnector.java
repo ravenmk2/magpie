@@ -8,10 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import ravenworks.magpie.common.util.PropertiesUtils;
 import ravenworks.magpie.common.util.Uuids;
 import ravenworks.magpie.engine.api.source.SourceConnector;
-import ravenworks.magpie.engine.api.source.http.HttpMessageContext;
-import ravenworks.magpie.engine.api.source.http.HttpSourceRouter;
-import ravenworks.magpie.engine.api.source.http.PublishFailedException;
-import ravenworks.magpie.engine.api.source.http.TopicNotAllowedException;
+import ravenworks.magpie.engine.api.source.http.*;
 import ravenworks.magpie.engine.api.stream.MessageRecord;
 import ravenworks.magpie.engine.api.stream.StreamProducer;
 
@@ -36,6 +33,12 @@ public class HttpSourceConnector implements SourceConnector {
      * message_id 约定：32 字符 uuid7 hex
      */
     private static final Pattern UUID_HEX_32 = Pattern.compile("[0-9a-fA-F]{32}");
+    /**
+     * 字段长度上限：message_id ≤32（magpie_message_log.message_id 为 CHAR(32)），
+     * type/topic/tenant_id/business_key ≤256（VARCHAR(256)）。绝不截断，超长入口即拒。
+     */
+    private static final int MAX_MESSAGE_ID_LENGTH = 32;
+    private static final int MAX_FIELD_LENGTH = 256;
 
     private final HttpSourceRouter router;
     private final StreamProducer producer;
@@ -101,6 +104,12 @@ public class HttpSourceConnector implements SourceConnector {
         var result = context.result();
         var event = context.event();
         String topic = event.getSubject();
+        try {
+            validateFieldLengths(event, topic);
+        } catch (InvalidMessageException e) {
+            result.completeExceptionally(e);
+            return;
+        }
         if (topic == null || topic.isBlank() || !this.isAllowed(topic)) {
             result.completeExceptionally(new TopicNotAllowedException(topic));
             return;
@@ -160,6 +169,24 @@ public class HttpSourceConnector implements SourceConnector {
     private static String extension(CloudEvent event, String name) {
         Object value = event.getExtension(name);
         return value != null ? String.valueOf(value) : null;
+    }
+
+    /**
+     * 入口边界校验：字段超长是错误而非截断理由（截断会破坏业务关联），
+     * 在进入 stream 之前直接拒绝。null 视为 ""，允许缺省。
+     */
+    private static void validateFieldLengths(CloudEvent event, String topic) {
+        requireLength("id", event.getId(), MAX_MESSAGE_ID_LENGTH);
+        requireLength("type", event.getType(), MAX_FIELD_LENGTH);
+        requireLength("topic", topic, MAX_FIELD_LENGTH);
+        requireLength("xtenantid", extension(event, EXT_TENANT_ID), MAX_FIELD_LENGTH);
+        requireLength("xbusinesskey", extension(event, EXT_BUSINESS_KEY), MAX_FIELD_LENGTH);
+    }
+
+    private static void requireLength(String field, String value, int maxLength) {
+        if (value != null && value.length() > maxLength) {
+            throw new InvalidMessageException(field, value.length(), maxLength);
+        }
     }
 
     private boolean isAllowed(String topic) {

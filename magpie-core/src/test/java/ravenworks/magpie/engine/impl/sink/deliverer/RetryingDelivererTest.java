@@ -6,6 +6,7 @@ import ravenworks.magpie.engine.api.sink.SinkResult;
 import ravenworks.magpie.engine.api.sink.SinkStatus;
 import ravenworks.magpie.engine.api.stream.ConsumerRecord;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -101,6 +102,29 @@ class RetryingDelivererTest {
         assertEquals(2, store.size());
         assertEquals(1, store.records().get(0).getAttempts());
         assertEquals(0, store.records().get(1).getAttempts());
+    }
+
+    @Test
+    void persistRetriesAtConfiguredInterval() {
+        var store = new InMemoryRetryMessageStore();
+        // 前 3 次 save 抛异常：每次失败按配置的 50ms 间隔 park 后重试
+        store.saveFailures.set(3);
+        var handler = new FakeSinkHandler();
+        handler.thenReturn(SinkStatus.FAILURE);
+        var deliverer = new BestEffortDeliverer("t", handler, 100,
+                new CircuitBreaker("t", 100, 1, 1_000), store, Duration.ofMillis(50));
+        deliverer.init();
+
+        var started = System.nanoTime();
+        var outcome = deliverer.deliver(List.of(FakeStreamConsumer.record(0, "a")));
+        var elapsedMs = (System.nanoTime() - started) / 1_000_000;
+
+        // 落库最终成功：水位照常推进，消息已进入重试库
+        assertEquals(0, outcome.watermark());
+        assertEquals(1, store.size());
+        // 3 次 50ms 间隔：下界证明间隔生效，上界证明用的是配置值而非默认 1s
+        assertTrue(elapsedMs >= 100, "应至少等待 3 次重试间隔, elapsed=" + elapsedMs + "ms");
+        assertTrue(elapsedMs < 2_000, "应使用配置的短间隔而非默认 1s, elapsed=" + elapsedMs + "ms");
     }
 
     @Test

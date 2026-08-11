@@ -217,9 +217,11 @@ public class HttpSinkConnector implements SinkConnector {
         Deliverer deliverer = switch (this.config.resolveDeliveryMode()) {
             case ORDERED -> new OrderedDeliverer(workerName, handler, cb);
             case KEY_ORDERED -> new KeyOrderedDeliverer(
-                    workerName, handler, this.config.getBatchSize(), cb, this.retryStore);
+                    workerName, handler, this.config.getBatchSize(), cb, this.retryStore,
+                    Duration.ofMillis(this.config.getPersistRetryDelayMs()));
             case BEST_EFFORT -> new BestEffortDeliverer(
-                    workerName, handler, this.config.getBatchSize(), cb, this.retryStore);
+                    workerName, handler, this.config.getBatchSize(), cb, this.retryStore,
+                    Duration.ofMillis(this.config.getPersistRetryDelayMs()));
         };
         return new SinkWorker(workerName, consumer, this.config.getBatchSize(),
                 this.config.getCommitInterval(), deliverer);

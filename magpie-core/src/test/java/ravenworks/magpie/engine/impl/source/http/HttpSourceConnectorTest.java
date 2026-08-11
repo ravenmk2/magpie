@@ -5,10 +5,7 @@ import io.cloudevents.CloudEventData;
 import io.cloudevents.SpecVersion;
 import io.cloudevents.core.builder.CloudEventBuilder;
 import org.junit.jupiter.api.Test;
-import ravenworks.magpie.engine.api.source.http.HttpSourceRouter;
-import ravenworks.magpie.engine.api.source.http.NoSubscriberException;
-import ravenworks.magpie.engine.api.source.http.PublishFailedException;
-import ravenworks.magpie.engine.api.source.http.TopicNotAllowedException;
+import ravenworks.magpie.engine.api.source.http.*;
 import ravenworks.magpie.engine.api.stream.MessageRecord;
 import ravenworks.magpie.engine.api.stream.SendResult;
 import ravenworks.magpie.engine.api.stream.StreamProducer;
@@ -233,6 +230,77 @@ class HttpSourceConnectorTest {
         var id = producer.sent.get(0).getId();
         assertNotEquals("placeholder", id);
         assertTrue(id.matches("[0-9a-f]{32}"), "id must be 32-char hex, got: " + id);
+    }
+
+    @Test
+    void oversizedIdFailsWithInvalidMessage() {
+        // id 约定 ≤32 字符：超长绝不截断，入口直接拒绝
+        var router = new HttpSourceRouterImpl();
+        var producer = new FakeStreamProducer();
+        var connector = newConnector(router, producer, "orders");
+        connector.start();
+        var event = CloudEventBuilder.v1()
+                .withId("i".repeat(33))
+                .withSource(URI.create("test"))
+                .withType("t.ping")
+                .withSubject("orders")
+                .build();
+
+        var ex = assertThrows(CompletionException.class, () -> router.publish("src", event).join());
+        assertInstanceOf(InvalidMessageException.class, ex.getCause());
+        assertTrue(producer.sent.isEmpty());
+    }
+
+    @Test
+    void oversizedTypeTopicTenantIdBusinessKeyFailWithInvalidMessage() {
+        var router = new HttpSourceRouterImpl();
+        var producer = new FakeStreamProducer();
+        // "*" 放行任意 topic：超长 topic 也必须走长度校验而非 TopicNotAllowed
+        var connector = newConnector(router, producer, "*");
+        connector.start();
+        var base = CloudEventBuilder.v1()
+                .withId(VALID_ID)
+                .withSource(URI.create("test"))
+                .withType("t.ping")
+                .withSubject("orders");
+
+        var events = List.of(
+                base.withType("t".repeat(257)).build(),
+                base.withSubject("s".repeat(257)).build(),
+                base.withExtension("xtenantid", "t".repeat(257)).build(),
+                base.withExtension("xbusinesskey", "b".repeat(257)).build());
+        for (var event : events) {
+            var ex = assertThrows(CompletionException.class, () -> router.publish("src", event).join());
+            assertInstanceOf(InvalidMessageException.class, ex.getCause());
+        }
+        assertTrue(producer.sent.isEmpty());
+    }
+
+    @Test
+    void maxLengthFieldsAreAccepted() {
+        // 边界值：id 恰好 32、type/topic/tenantId/businessKey 恰好 256 均放行
+        var router = new HttpSourceRouterImpl();
+        var producer = new FakeStreamProducer();
+        var connector = newConnector(router, producer, "*");
+        connector.start();
+        var event = CloudEventBuilder.v1()
+                .withId(VALID_ID)
+                .withSource(URI.create("test"))
+                .withType("t".repeat(256))
+                .withSubject("s".repeat(256))
+                .withExtension("xtenantid", "t".repeat(256))
+                .withExtension("xbusinesskey", "b".repeat(256))
+                .build();
+
+        router.publish("src", event).join();
+
+        assertEquals(1, producer.sent.size());
+        var record = producer.sent.get(0);
+        assertEquals(VALID_ID, record.getId());
+        assertEquals(256, record.getType().length());
+        assertEquals(256, record.getTopic().length());
+        assertEquals(256, record.getTenantId().length());
+        assertEquals(256, record.getBusinessKey().length());
     }
 
     @Test
