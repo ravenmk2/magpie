@@ -11,9 +11,8 @@ import ravenworks.magpie.engine.api.source.http.HttpSourceRouter;
 import ravenworks.magpie.engine.api.source.http.InvalidMessageException;
 import ravenworks.magpie.engine.api.source.http.NoSubscriberException;
 import ravenworks.magpie.engine.api.source.http.TopicNotAllowedException;
-import ravenworks.magpie.server.dto.ErrorResponse;
+import ravenworks.magpie.server.dto.ApiResponse;
 
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
@@ -38,12 +37,12 @@ public class PublishController {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Object> onUnreadable(HttpMessageNotReadableException e) {
-        Object body = new ErrorResponse("invalid_request_error", e.getMessage());
+        Object body = ApiResponse.error("invalid_request_error", e.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
     private static ResponseEntity<Object> success() {
-        Object body = Map.of();
+        Object body = ApiResponse.ok();
         return ResponseEntity.ok(body);
     }
 
@@ -68,7 +67,7 @@ public class PublishController {
             code = "publish_failed_error";
         }
 
-        Object body = new ErrorResponse(code, cause.getMessage());
+        Object body = ApiResponse.error(code, cause.getMessage());
         return ResponseEntity.status(status).body(body);
     }
 

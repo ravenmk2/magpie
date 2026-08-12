@@ -20,7 +20,7 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.utility.DockerImageName;
 import ravenworks.magpie.engine.impl.rabbitmq.RabbitUtils;
-import ravenworks.magpie.server.dto.ErrorResponse;
+import ravenworks.magpie.server.dto.ApiResponse;
 
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -138,6 +138,10 @@ class ServerE2eIT {
 
         ResponseEntity<String> response = postStructured(TOPIC, "{\"orderId\":\"o-1\"}", String.class);
         assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        // 统一响应信封：成功 success=true、error 为 null、data 为对象
+        assertTrue(response.getBody().contains("\"success\":true"),
+                "expected success envelope, got: " + response.getBody());
 
         // print sink 消费这条消息后由 OffsetTrackerImpl 提交 offset（值为 last offset + 1），
         // 断言发布后水位严格增大（排除探针流量提交的干扰），超时覆盖 sink 消费与提交延迟
@@ -181,11 +185,11 @@ class ServerE2eIT {
     void disallowedTopicRejected() {
         awaitSourceReady();
 
-        ResponseEntity<ErrorResponse> response = postStructured(
-                "server-e2e-others", "{\"orderId\":\"o-3\"}", ErrorResponse.class);
+        ResponseEntity<ApiResponse> response = postStructured(
+                "server-e2e-others", "{\"orderId\":\"o-3\"}", ApiResponse.class);
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
         assertNotNull(response.getBody());
-        assertEquals("topic_not_allowed_error", response.getBody().error());
+        assertEquals("topic_not_allowed_error", response.getBody().error().code());
     }
 
     /**
@@ -197,22 +201,22 @@ class ServerE2eIT {
         awaitSourceReady();
 
         // id 上限 32（magpie_message_log.message_id CHAR(32)）
-        ResponseEntity<ErrorResponse> badId = postStructured(SOURCE, TOPIC, "a".repeat(33), null,
-                "{\"orderId\":\"o-bad-id\"}", ErrorResponse.class);
+        ResponseEntity<ApiResponse> badId = postStructured(SOURCE, TOPIC, "a".repeat(33), null,
+                "{\"orderId\":\"o-bad-id\"}", ApiResponse.class);
         assertEquals(HttpStatus.BAD_REQUEST, badId.getStatusCode());
         assertNotNull(badId.getBody());
-        assertEquals("invalid_message_error", badId.getBody().error());
-        assertTrue(badId.getBody().message().contains("'id'"),
-                "expected field name in message, got: " + badId.getBody().message());
+        assertEquals("invalid_message_error", badId.getBody().error().code());
+        assertTrue(badId.getBody().error().message().contains("'id'"),
+                "expected field name in message, got: " + badId.getBody().error().message());
 
         // businessKey 上限 256（magpie_message_log.business_key VARCHAR(256)）
-        ResponseEntity<ErrorResponse> badKey = postStructured(SOURCE, TOPIC, id32(), "b".repeat(257),
-                "{\"orderId\":\"o-bad-key\"}", ErrorResponse.class);
+        ResponseEntity<ApiResponse> badKey = postStructured(SOURCE, TOPIC, id32(), "b".repeat(257),
+                "{\"orderId\":\"o-bad-key\"}", ApiResponse.class);
         assertEquals(HttpStatus.BAD_REQUEST, badKey.getStatusCode());
         assertNotNull(badKey.getBody());
-        assertEquals("invalid_message_error", badKey.getBody().error());
-        assertTrue(badKey.getBody().message().contains("'xbusinesskey'"),
-                "expected field name in message, got: " + badKey.getBody().message());
+        assertEquals("invalid_message_error", badKey.getBody().error().code());
+        assertTrue(badKey.getBody().error().message().contains("'xbusinesskey'"),
+                "expected field name in message, got: " + badKey.getBody().error().message());
     }
 
     /**
@@ -222,11 +226,11 @@ class ServerE2eIT {
     @Test
     void sourceDeregistrationReturns503() {
         // 从未播种的 source：router 无订阅者
-        ResponseEntity<ErrorResponse> unknown = postStructured("server-e2e-ghost", TOPIC, id32(), null,
-                "{\"orderId\":\"o-4\"}", ErrorResponse.class);
+        ResponseEntity<ApiResponse> unknown = postStructured("server-e2e-ghost", TOPIC, id32(), null,
+                "{\"orderId\":\"o-4\"}", ApiResponse.class);
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, unknown.getStatusCode());
         assertNotNull(unknown.getBody());
-        assertEquals("no_subscriber_error", unknown.getBody().error());
+        assertEquals("no_subscriber_error", unknown.getBody().error().code());
 
         // 播种专用 source/topic，等 reconcile 挂上 router 后 200
         seedTopicAndSource(TOGGLE_TOPIC, TOGGLE_SOURCE);
@@ -245,11 +249,11 @@ class ServerE2eIT {
                 .atMost(Duration.ofSeconds(60))
                 .pollInterval(Duration.ofSeconds(1))
                 .untilAsserted(() -> {
-                    ResponseEntity<ErrorResponse> gone = postStructured(TOGGLE_SOURCE, TOGGLE_TOPIC, id32(), null,
-                            "{\"orderId\":\"o-6\"}", ErrorResponse.class);
+                    ResponseEntity<ApiResponse> gone = postStructured(TOGGLE_SOURCE, TOGGLE_TOPIC, id32(), null,
+                            "{\"orderId\":\"o-6\"}", ApiResponse.class);
                     assertEquals(HttpStatus.SERVICE_UNAVAILABLE, gone.getStatusCode());
                     assertNotNull(gone.getBody());
-                    assertEquals("no_subscriber_error", gone.getBody().error());
+                    assertEquals("no_subscriber_error", gone.getBody().error().code());
                 });
     }
 
@@ -286,11 +290,11 @@ class ServerE2eIT {
                     .atMost(Duration.ofSeconds(60))
                     .pollInterval(Duration.ofSeconds(1))
                     .untilAsserted(() -> {
-                        ResponseEntity<ErrorResponse> failed = postStructured(BROKEN_SOURCE, BROKEN_TOPIC,
-                                id32(), null, "{\"orderId\":\"o-7\"}", ErrorResponse.class);
+                        ResponseEntity<ApiResponse> failed = postStructured(BROKEN_SOURCE, BROKEN_TOPIC,
+                                id32(), null, "{\"orderId\":\"o-7\"}", ApiResponse.class);
                         assertEquals(HttpStatus.BAD_GATEWAY, failed.getStatusCode());
                         assertNotNull(failed.getBody());
-                        assertEquals("publish_failed_error", failed.getBody().error());
+                        assertEquals("publish_failed_error", failed.getBody().error().code());
                     });
 
             // 发送在路由阶段即失败，broker 侧 committed offset 不得有变化

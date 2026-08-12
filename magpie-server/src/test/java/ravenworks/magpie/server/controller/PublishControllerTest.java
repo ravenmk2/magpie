@@ -14,7 +14,7 @@ import ravenworks.magpie.engine.api.stream.SendResult;
 import ravenworks.magpie.engine.api.stream.StreamProducer;
 import ravenworks.magpie.engine.impl.source.http.HttpSourceConnector;
 import ravenworks.magpie.engine.impl.source.http.HttpSourceRouterImpl;
-import ravenworks.magpie.server.dto.ErrorResponse;
+import ravenworks.magpie.server.dto.ApiResponse;
 
 import java.io.InputStream;
 import java.net.URI;
@@ -75,13 +75,16 @@ class PublishControllerTest {
     }
 
     @Test
-    void successReturnsOkWithEmptyMap() {
+    void successReturnsOkEnvelope() {
         var controller = new PublishController(okRouter());
 
         ResponseEntity<Object> response = controller.publish("orders", EVENT).join();
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertEquals(Map.of(), response.getBody());
+        ApiResponse<?> body = assertInstanceOf(ApiResponse.class, response.getBody());
+        assertTrue(body.success());
+        assertEquals(Map.of(), body.data());
+        assertNull(body.error());
     }
 
     @Test
@@ -91,9 +94,11 @@ class PublishControllerTest {
         ResponseEntity<Object> response = controller.publish("orders", EVENT).join();
 
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
-        ErrorResponse body = assertInstanceOf(ErrorResponse.class, response.getBody());
-        assertEquals("topic_not_allowed_error", body.error());
-        assertNotNull(body.message());
+        ApiResponse<?> body = assertInstanceOf(ApiResponse.class, response.getBody());
+        assertFalse(body.success());
+        assertNull(body.data());
+        assertEquals("topic_not_allowed_error", body.error().code());
+        assertNotNull(body.error().message());
     }
 
     @Test
@@ -103,8 +108,10 @@ class PublishControllerTest {
         ResponseEntity<Object> response = controller.publish("orders", EVENT).join();
 
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, response.getStatusCode());
-        ErrorResponse body = assertInstanceOf(ErrorResponse.class, response.getBody());
-        assertEquals("no_subscriber_error", body.error());
+        ApiResponse<?> body = assertInstanceOf(ApiResponse.class, response.getBody());
+        assertFalse(body.success());
+        assertNull(body.data());
+        assertEquals("no_subscriber_error", body.error().code());
     }
 
     @Test
@@ -114,9 +121,11 @@ class PublishControllerTest {
         ResponseEntity<Object> response = controller.publish("orders", EVENT).join();
 
         assertEquals(HttpStatus.BAD_GATEWAY, response.getStatusCode());
-        ErrorResponse body = assertInstanceOf(ErrorResponse.class, response.getBody());
-        assertEquals("publish_failed_error", body.error());
-        assertEquals("boom", body.message());
+        ApiResponse<?> body = assertInstanceOf(ApiResponse.class, response.getBody());
+        assertFalse(body.success());
+        assertNull(body.data());
+        assertEquals("publish_failed_error", body.error().code());
+        assertEquals("boom", body.error().message());
     }
 
     @Test
@@ -127,8 +136,10 @@ class PublishControllerTest {
         ResponseEntity<Object> response = controller.publish("orders", EVENT).join();
 
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
-        ErrorResponse body = assertInstanceOf(ErrorResponse.class, response.getBody());
-        assertEquals("topic_not_allowed_error", body.error());
+        ApiResponse<?> body = assertInstanceOf(ApiResponse.class, response.getBody());
+        assertFalse(body.success());
+        assertNull(body.data());
+        assertEquals("topic_not_allowed_error", body.error().code());
     }
 
     @Test
@@ -138,9 +149,11 @@ class PublishControllerTest {
         ResponseEntity<Object> response = controller.publish("orders", EVENT).join();
 
         assertEquals(HttpStatus.BAD_GATEWAY, response.getStatusCode());
-        ErrorResponse body = assertInstanceOf(ErrorResponse.class, response.getBody());
-        assertEquals("publish_failed_error", body.error());
-        assertEquals("bare", body.message());
+        ApiResponse<?> body = assertInstanceOf(ApiResponse.class, response.getBody());
+        assertFalse(body.success());
+        assertNull(body.data());
+        assertEquals("publish_failed_error", body.error().code());
+        assertEquals("bare", body.error().message());
     }
 
     @Test
@@ -151,9 +164,11 @@ class PublishControllerTest {
         ResponseEntity<Object> response = controller.publish("orders", EVENT).join();
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        ErrorResponse body = assertInstanceOf(ErrorResponse.class, response.getBody());
-        assertEquals("invalid_message_error", body.error());
-        assertNotNull(body.message());
+        ApiResponse<?> body = assertInstanceOf(ApiResponse.class, response.getBody());
+        assertFalse(body.success());
+        assertNull(body.data());
+        assertEquals("invalid_message_error", body.error().code());
+        assertNotNull(body.error().message());
     }
 
     /**
@@ -195,8 +210,10 @@ class PublishControllerTest {
         ResponseEntity<Object> response = controller.publish("src", event).join();
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        ErrorResponse body = assertInstanceOf(ErrorResponse.class, response.getBody());
-        assertEquals("invalid_message_error", body.error());
+        ApiResponse<?> body = assertInstanceOf(ApiResponse.class, response.getBody());
+        assertFalse(body.success());
+        assertNull(body.data());
+        assertEquals("invalid_message_error", body.error().code());
     }
 
     @Test
@@ -213,8 +230,10 @@ class PublishControllerTest {
         ResponseEntity<Object> response = controller.publish("src", event).join();
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        ErrorResponse body = assertInstanceOf(ErrorResponse.class, response.getBody());
-        assertEquals("invalid_message_error", body.error());
+        ApiResponse<?> body = assertInstanceOf(ApiResponse.class, response.getBody());
+        assertFalse(body.success());
+        assertNull(body.data());
+        assertEquals("invalid_message_error", body.error().code());
     }
 
     @Test
@@ -254,9 +273,11 @@ class PublishControllerTest {
                 new HttpMessageNotReadableException("no body", inputMessage));
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        ErrorResponse body = assertInstanceOf(ErrorResponse.class, response.getBody());
-        assertEquals("invalid_request_error", body.error());
-        assertEquals("no body", body.message());
+        ApiResponse<?> body = assertInstanceOf(ApiResponse.class, response.getBody());
+        assertFalse(body.success());
+        assertNull(body.data());
+        assertEquals("invalid_request_error", body.error().code());
+        assertEquals("no body", body.error().message());
     }
 
 }
