@@ -1,6 +1,5 @@
-# Maven
-magpie-core/target/
-magpie-server/target/
+# Maven（只匹配模块根的构建输出，不误伤 src 下可能出现的 target 包）
+/*/target/
 pom.xml.tag
 pom.xml.releaseBackup
 pom.xml.versionsBackup
@@ -38,3 +37,6 @@ Thumbs.db
 .venv/
 __pycache__/
 *.pyc
+
+# 本地环境配置（模板见各 .env.example）
+.env

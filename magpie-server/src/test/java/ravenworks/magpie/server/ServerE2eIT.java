@@ -16,10 +16,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.mysql.MySQLContainer;
-// 新版 org.testcontainers.rabbitmq.RabbitMQContainer（2.x）移除了 withPluginsEnabled，
-// 启用 stream 插件仍需使用兼容层中的旧类。
 import org.testcontainers.containers.RabbitMQContainer;
+import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.utility.DockerImageName;
 import ravenworks.magpie.engine.impl.rabbitmq.RabbitUtils;
 import ravenworks.magpie.server.dto.ApiResponse;
@@ -33,6 +31,9 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+
+// 新版 org.testcontainers.rabbitmq.RabbitMQContainer（2.x）移除了 withPluginsEnabled，
+// 启用 stream 插件仍需使用兼容层中的旧类。
 
 
 /**

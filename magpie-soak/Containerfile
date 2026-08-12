@@ -1,0 +1,25 @@
+FROM eclipse-temurin:25-jre AS builder
+WORKDIR /build
+COPY magpie-soak/target/magpie-soak-*.jar app.jar
+RUN java -Djarmode=tools -jar app.jar extract --layers --application-filename app.jar --destination extracted
+
+# ----------------------------------------------------------------------------------------------------
+
+FROM eclipse-temurin:25-jre
+
+RUN groupadd --gid 900 app \
+    && useradd --uid 900 --gid app --no-create-home app \
+    && mkdir -p /app/logs \
+    && chown app:app /app/logs
+
+WORKDIR /app
+
+COPY --from=builder --chown=app:app /build/extracted/dependencies/ ./
+COPY --from=builder --chown=app:app /build/extracted/spring-boot-loader/ ./
+COPY --from=builder --chown=app:app /build/extracted/snapshot-dependencies/ ./
+COPY --from=builder --chown=app:app /build/extracted/application/ ./
+
+USER app
+EXPOSE 8080
+# 角色由 SPRING_PROFILES_ACTIVE=loadgen|verifier 决定
+ENTRYPOINT ["java", "-jar", "app.jar"]

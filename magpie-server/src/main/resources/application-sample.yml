@@ -32,6 +32,13 @@ spring:
     open-in-view: false                        # 避免长连接持有 EntityManager
 
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus    # 暴露 Prometheus 指标端点（/actuator/prometheus）
+
+
 magpie:
   rabbitmq-stream:
     uris:

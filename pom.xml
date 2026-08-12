@@ -12,6 +12,7 @@
     <modules>
         <module>magpie-core</module>
         <module>magpie-server</module>
+        <module>magpie-soak</module>
     </modules>
 
     <scm>
