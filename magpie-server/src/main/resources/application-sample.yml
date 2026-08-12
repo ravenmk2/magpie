@@ -1,6 +1,7 @@
 # =============================================================================
-# 示例配置
-# 复制为 application.yml 并替换占位符后使用
+# 示例配置（Docker 环境默认值）
+# 主机名按容器名解析（mysql / rabbitmq），可用环境变量覆盖；
+# 构建镜像时会复制为 /app/config/application.yml，容器外使用则复制为 application.yml
 # =============================================================================
 
 spring:
@@ -16,12 +17,9 @@ spring:
     time-zone: ${TZ:Asia/Shanghai}             # Jackson 序列化 Instant 时区
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    # 替换为实际的数据库连接字符串
-    url: jdbc:mysql://localhost:3306/magpie?useSSL=false&characterEncoding=UTF-8
-    # 替换为实际的数据库用户名
-    username: YOUR_DB_USER
-    # 替换为实际的数据库密码
-    password: YOUR_DB_PASSWORD
+    url: jdbc:mysql://${MYSQL_HOST:mysql}:3306/magpie?useSSL=false&characterEncoding=UTF-8
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:root}
   jpa:
     hibernate:
       ddl-auto: validate                       # 校验 Entity 与数据库表结构一致性（不自动变更 DDL）
@@ -37,4 +35,4 @@ spring:
 magpie:
   rabbitmq-stream:
     uris:
-      - rabbitmq-stream://guest:guest@localhost:5552/%2f
+      - rabbitmq-stream://guest:guest@${RABBITMQ_HOST:rabbitmq}:5552/%2f

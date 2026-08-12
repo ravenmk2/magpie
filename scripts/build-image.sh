@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 #
-# 在远程测试机上运行集成测试（Testcontainers 起 MySQL / RabbitMQ Stream）。
+# 构建 magpie-server 镜像：先用工具链编译、跑单测并打包 jar，再 docker build。
 # 前置：先执行 scripts/install-toolchain.sh 装好工具链（或自行安装 JDK 25 + Maven），
-# 且本机 Docker daemon 可用。
+# 且 Docker daemon 可用。
 #
 # 用法：
-#   scripts/run-it.sh                # 全部 IT（mvn verify -Pit）
-#   scripts/run-it.sh -Dit.test=RabbitStreamIT   # 透传参数，跑单个 IT
+#   scripts/build-image.sh                 # mvn clean package（含单测）+ docker build
+#   scripts/build-image.sh -DskipTests     # 透传 Maven 参数，跳过测试
 #
 set -euo pipefail
 
@@ -21,9 +21,12 @@ if ! command -v mvn >/dev/null 2>&1; then
     exit 1
 fi
 if ! docker info >/dev/null 2>&1; then
-    echo "error: Docker daemon not reachable — integration tests need it" >&2
+    echo "error: Docker daemon not reachable" >&2
     exit 1
 fi
 
 cd "$(dirname "$0")/.."
-mvn -B verify -Pit "$@"
+
+mvn -B clean package "$@"
+
+docker build -f magpie-server/Containerfile -t local/magpie-server:latest .
