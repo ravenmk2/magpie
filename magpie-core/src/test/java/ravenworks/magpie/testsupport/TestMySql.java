@@ -4,7 +4,7 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
 import javax.sql.DataSource;
@@ -31,8 +31,8 @@ public final class TestMySql {
 
     private static final Path SCHEMA_SQL = Path.of("..", "docs", "database", "schema.sql");
 
-    private static final MySQLContainer<?> CONTAINER =
-            new MySQLContainer<>(DockerImageName.parse("mysql:8.4"))
+    private static final MySQLContainer CONTAINER =
+            new MySQLContainer(DockerImageName.parse("mysql:8.4"))
                     // 慢速/高负载 Docker 宿主机上首次初始化可能超过默认 60s
                     .withStartupTimeout(Duration.ofMinutes(5));
 

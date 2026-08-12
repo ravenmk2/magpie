@@ -16,7 +16,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.mysql.MySQLContainer;
+// 新版 org.testcontainers.rabbitmq.RabbitMQContainer（2.x）移除了 withPluginsEnabled，
+// 启用 stream 插件仍需使用兼容层中的旧类。
 import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.utility.DockerImageName;
 import ravenworks.magpie.engine.impl.rabbitmq.RabbitUtils;
@@ -74,8 +76,8 @@ class ServerE2eIT {
     private static final String BROKEN_TOPIC = "server-e2e-broken";
     private static final String BROKEN_SOURCE = "server-e2e-broken-http";
 
-    private static final MySQLContainer<?> MYSQL =
-            new MySQLContainer<>(DockerImageName.parse("mysql:8.4"));
+    private static final MySQLContainer MYSQL =
+            new MySQLContainer(DockerImageName.parse("mysql:8.4"));
 
     private static final RabbitMQContainer RABBITMQ =
             new RabbitMQContainer(DockerImageName.parse("rabbitmq:4.3.1-management"))

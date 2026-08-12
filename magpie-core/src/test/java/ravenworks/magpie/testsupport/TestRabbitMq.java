@@ -1,5 +1,7 @@
 package ravenworks.magpie.testsupport;
 
+// 新版 org.testcontainers.rabbitmq.RabbitMQContainer（2.x）移除了 withPluginsEnabled，
+// 启用 stream 插件仍需使用兼容层中的旧类。
 import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.utility.DockerImageName;
 
