@@ -60,10 +60,9 @@ class UuidsTest {
     }
 
     @Test
-    void uuid7HexWithinSameMillisecondIsNotOrdered() {
-        // 钉住实际行为（已知限制，未改生产代码）：同一毫秒内的 uuid7 后缀是纯随机数，
-        // 完整 hex 串不保证严格递增，不能依赖字典序对同毫秒事件排序。
-        // 实测（java-uuid-generator 5.1.1）：紧循环 10_000 次中每个同毫秒批次都存在逆序对。
+    void uuid7HexIsStrictlyIncreasingWithinSameMillisecond() {
+        // outbox 按 (created_at, id) 排序的决胜键：同一毫秒内的 uuid7 也必须字典序递增
+        // （timeBasedEpochGenerator 的计数器变体，区别于随机后缀变体）
         List<String> batch = new ArrayList<>();
         String prefix = null;
         for (int i = 0; i < 10_000; i++) {
@@ -80,14 +79,10 @@ class UuidsTest {
         }
         assertTrue(batch.size() >= 2, "no same-millisecond batch found");
 
-        boolean strictlyIncreasing = true;
         for (int i = 1; i < batch.size(); i++) {
-            if (batch.get(i).compareTo(batch.get(i - 1)) <= 0) {
-                strictlyIncreasing = false;
-                break;
-            }
+            assertTrue(batch.get(i).compareTo(batch.get(i - 1)) > 0,
+                    "same-millisecond batch not strictly increasing at index " + i + ": " + batch);
         }
-        assertFalse(strictlyIncreasing, "same-millisecond batch unexpectedly ordered: " + batch);
     }
 
 }

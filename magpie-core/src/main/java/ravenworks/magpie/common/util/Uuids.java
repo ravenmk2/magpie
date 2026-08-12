@@ -14,7 +14,11 @@ import java.util.UUID;
 @UtilityClass
 public class Uuids {
 
-    private static final NoArgGenerator UUID_V7_GENERATOR = Generators.timeBasedEpochRandomGenerator();
+    /**
+     * UUIDv7 单调变体（java-uuid-generator 5.1+）：同一毫秒内用计数器保证递增，
+     * 字典序即生成序——magpie_outbox_message 按 (created_at, id) 排序依赖这一性质。
+     */
+    private static final NoArgGenerator UUID_V7_GENERATOR = Generators.timeBasedEpochGenerator();
 
     public static String uuidHex() {
         return toHex(UUID.randomUUID());
