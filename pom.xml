@@ -32,7 +32,7 @@
         <java-uuid-generator.version>5.2.0</java-uuid-generator.version>
         <caffeine.version>3.2.4</caffeine.version>
         <rabbitmq-stream-client.version>1.9.0</rabbitmq-stream-client.version>
-        <cloudevents.version>4.1.1</cloudevents.version>
+        <cloudevents.version>5.0.0</cloudevents.version>
         <awaitility.version>4.3.0</awaitility.version>
         <spring-boot.version>4.1.0</spring-boot.version>
         <!-- deps:end -->
