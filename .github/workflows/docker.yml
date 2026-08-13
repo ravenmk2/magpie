@@ -34,7 +34,7 @@ jobs:
       - name: Resolve image coordinates
         run: |
           echo "VERSION=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
-          echo "IMAGE_NAME=ghcr.io/$(echo '${{ github.repository_owner }}/magpie' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+          echo "IMAGE_NAME=ghcr.io/$(echo '${{ github.repository_owner }}/magpie-server' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
           echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
 
       - uses: docker/setup-buildx-action@v3
@@ -54,7 +54,7 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ env.VERSION }}
             ${{ env.IMAGE_NAME }}:latest
           labels: |
-            org.opencontainers.image.title=magpie
+            org.opencontainers.image.title=magpie-server
             org.opencontainers.image.description=Magpie lightweight message bus
             org.opencontainers.image.version=${{ env.VERSION }}
             org.opencontainers.image.created=${{ env.BUILD_DATE }}
