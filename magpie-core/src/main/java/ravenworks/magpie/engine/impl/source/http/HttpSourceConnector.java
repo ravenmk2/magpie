@@ -92,6 +92,11 @@ public class HttpSourceConnector implements SourceConnector {
     public CompletableFuture<Void> shutdown() {
         this.running.set(false);
         this.router.unsubscribe(this.name);
+        try {
+            this.producer.close();
+        } catch (Exception e) {
+            log.error("Source '{}' failed to close producer", this.name, e);
+        }
         return CompletableFuture.completedFuture(null);
     }
 

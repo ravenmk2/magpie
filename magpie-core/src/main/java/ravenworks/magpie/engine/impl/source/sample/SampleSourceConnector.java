@@ -58,7 +58,13 @@ public class SampleSourceConnector implements SourceConnector {
 
     @Override
     public CompletableFuture<Void> shutdown() {
-        return this.workLoop.shutdown();
+        return this.workLoop.shutdown().whenComplete((v, e) -> {
+            try {
+                this.producer.close();
+            } catch (Exception ex) {
+                log.error("Source '{}' failed to close producer", this.name, ex);
+            }
+        });
     }
 
     @Override

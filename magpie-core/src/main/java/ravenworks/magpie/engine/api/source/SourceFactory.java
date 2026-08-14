@@ -1,6 +1,6 @@
 package ravenworks.magpie.engine.api.source;
 
-import ravenworks.magpie.engine.api.stream.StreamProducer;
+import ravenworks.magpie.engine.api.stream.StreamProvider;
 
 
 /**
@@ -8,6 +8,6 @@ import ravenworks.magpie.engine.api.stream.StreamProducer;
  */
 public interface SourceFactory {
 
-    SourceConnector create(StreamProducer producer, SourceDefinition definition);
+    SourceConnector create(StreamProvider provider, SourceDefinition definition);
 
 }

@@ -100,7 +100,7 @@ class CoordinatorE2eIT {
         provider = new RabbitStreamProvider(TestRabbitMq.streamOptions(), tracker);
         producer = new RoutingStreamProducer(provider, streamReg);
         router = new HttpSourceRouterImpl();
-        sourceFactory = new SourceFactoryImpl(List.of(new HttpSourceProvider(router)));
+        sourceFactory = new SourceFactoryImpl(List.of(new HttpSourceProvider(router, streamReg)));
         recordingProvider = new RecordingSinkProvider(streamReg, retryStore);
         sinkFactory = new SinkFactoryImpl(List.of(recordingProvider));
         coordinator = startCoordinator();
@@ -273,7 +273,7 @@ class CoordinatorE2eIT {
 
     private static Coordinator startCoordinator() {
         var c = new Coordinator(new LeaderElectionImpl(lockRepo), streamReg, provider,
-                sourceReg, sourceFactory, targetReg, sinkFactory, producer, RESYNC_INTERVAL_MS);
+                sourceReg, sourceFactory, targetReg, sinkFactory, RESYNC_INTERVAL_MS);
         c.start();
         return c;
     }

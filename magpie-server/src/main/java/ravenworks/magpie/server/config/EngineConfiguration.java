@@ -32,7 +32,6 @@ import ravenworks.magpie.engine.impl.source.http.HttpSourceRouterImpl;
 import ravenworks.magpie.engine.impl.source.mysql.MySqlPollSourceProvider;
 import ravenworks.magpie.engine.impl.source.sample.SampleSourceProvider;
 import ravenworks.magpie.engine.impl.stream.OffsetTrackerImpl;
-import ravenworks.magpie.engine.impl.stream.RoutingStreamProducer;
 import ravenworks.magpie.engine.impl.stream.StreamRegistryImpl;
 
 import java.util.ArrayList;
@@ -66,11 +65,12 @@ public class EngineConfiguration {
 
     @Bean
     public static SourceFactory sourceFactory(@NonNull List<SourceProvider> providers,
-                                              @NonNull HttpSourceRouter httpSourceRouter) {
+                                              @NonNull HttpSourceRouter httpSourceRouter,
+                                              @NonNull StreamRegistry streamRegistry) {
         var merged = new ArrayList<>(providers);
-        merged.add(new SampleSourceProvider());
-        merged.add(new MySqlPollSourceProvider());
-        merged.add(new HttpSourceProvider(httpSourceRouter));
+        merged.add(new SampleSourceProvider(streamRegistry));
+        merged.add(new MySqlPollSourceProvider(streamRegistry));
+        merged.add(new HttpSourceProvider(httpSourceRouter, streamRegistry));
         return new SourceFactoryImpl(merged);
     }
 
@@ -107,16 +107,9 @@ public class EngineConfiguration {
                                           @NonNull SourceRegistry sourceRegistry,
                                           @NonNull SourceFactory sourceFactory,
                                           @NonNull TargetRegistry targetRegistry,
-                                          @NonNull SinkFactory sinkFactory,
-                                          @NonNull RoutingStreamProducer streamProducer) {
+                                          @NonNull SinkFactory sinkFactory) {
         return new Coordinator(leaderElection, streamRegistry, streamProvider,
-                sourceRegistry, sourceFactory, targetRegistry, sinkFactory, streamProducer);
-    }
-
-    @Bean
-    public static RoutingStreamProducer routingStreamProducer(@NonNull StreamProvider streamProvider,
-                                                              @NonNull StreamRegistry streamRegistry) {
-        return new RoutingStreamProducer(streamProvider, streamRegistry);
+                sourceRegistry, sourceFactory, targetRegistry, sinkFactory);
     }
 
     @Bean

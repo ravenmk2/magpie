@@ -7,7 +7,7 @@ import ravenworks.magpie.engine.api.source.SourceConnector;
 import ravenworks.magpie.engine.api.source.SourceDefinition;
 import ravenworks.magpie.engine.api.source.SourceFactory;
 import ravenworks.magpie.engine.api.source.SourceProvider;
-import ravenworks.magpie.engine.api.stream.StreamProducer;
+import ravenworks.magpie.engine.api.stream.StreamProvider;
 
 import java.util.List;
 
@@ -23,11 +23,11 @@ public class SourceFactoryImpl implements SourceFactory {
     private final List<SourceProvider> providers;
 
     @Override
-    public SourceConnector create(@NonNull StreamProducer producer,
+    public SourceConnector create(@NonNull StreamProvider provider,
                                   @NonNull SourceDefinition definition) {
-        for (var provider : this.providers) {
-            if (provider.type().equals(definition.getType())) {
-                return provider.create(producer, definition.getName(), definition.getProperties());
+        for (var p : this.providers) {
+            if (p.type().equals(definition.getType())) {
+                return p.create(provider, definition);
             }
         }
         throw new IllegalArgumentException("Unknown source type: " + definition.getType());

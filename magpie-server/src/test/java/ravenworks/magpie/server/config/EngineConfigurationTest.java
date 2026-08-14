@@ -98,20 +98,9 @@ class EngineConfigurationTest {
         SinkFactory sinkFactory = (provider, definition) -> {
             throw new UnsupportedOperationException();
         };
-        StreamProducer sourceProducer = new StreamProducer() {
-
-            @Override
-            public CompletableFuture<SendResult> send(MessageRecord record) {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
-            public void close() {
-            }
-        };
 
         var coordinator = new Coordinator(leaderElection, streamRegistry, streamProvider,
-                sourceRegistry, sourceFactory, targetRegistry, sinkFactory, sourceProducer, 10);
+                sourceRegistry, sourceFactory, targetRegistry, sinkFactory, 10);
         SmartLifecycle lifecycle = EngineConfiguration.coordinatorLifecycle(coordinator);
 
         assertFalse(lifecycle.isRunning(), "not running before start");

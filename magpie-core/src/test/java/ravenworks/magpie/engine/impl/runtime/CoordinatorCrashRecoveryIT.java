@@ -85,7 +85,6 @@ class CoordinatorCrashRecoveryIT {
     private static RecordingSinkProvider recordingProvider;
     private static Coordinator coordinator;
     private static RabbitStreamProvider recoveryProvider;
-    private static RoutingStreamProducer recoveryProducer;
     private static Coordinator recoveryCoordinator;
 
     @BeforeAll
@@ -109,10 +108,10 @@ class CoordinatorCrashRecoveryIT {
         provider = new RabbitStreamProvider(TestRabbitMq.streamOptions(), tracker);
         producer = new RoutingStreamProducer(provider, streamReg);
         router = new HttpSourceRouterImpl();
-        sourceFactory = new SourceFactoryImpl(List.of(new HttpSourceProvider(router)));
+        sourceFactory = new SourceFactoryImpl(List.of(new HttpSourceProvider(router, streamReg)));
         recordingProvider = new RecordingSinkProvider(streamReg, retryStore);
         sinkFactory = new SinkFactoryImpl(List.of(recordingProvider));
-        coordinator = startCoordinator(provider, producer);
+        coordinator = startCoordinator(provider);
     }
 
     @AfterAll
@@ -125,9 +124,6 @@ class CoordinatorCrashRecoveryIT {
         }
         if (producer != null) {
             producer.close();
-        }
-        if (recoveryProducer != null) {
-            recoveryProducer.close();
         }
         closeQuietly(provider);
         closeQuietly(recoveryProvider);
@@ -211,8 +207,7 @@ class CoordinatorCrashRecoveryIT {
         // 新 provider + 新 Coordinator 接管同一个 DB 和同一个 broker
         var tracker = new OffsetTrackerImpl(context.getBean(ConsumerOffsetRepository.class));
         recoveryProvider = new RabbitStreamProvider(TestRabbitMq.streamOptions(), tracker);
-        recoveryProducer = new RoutingStreamProducer(recoveryProvider, streamReg);
-        recoveryCoordinator = startCoordinator(recoveryProvider, recoveryProducer);
+        recoveryCoordinator = startCoordinator(recoveryProvider);
 
         // 接管后新建 handler（不带失败规则，下游视为已恢复）
         await().atMost(AWAIT).until(() -> recordingProvider.handlers(target).size() >= 2);
@@ -233,10 +228,9 @@ class CoordinatorCrashRecoveryIT {
     }
 
 
-    private static Coordinator startCoordinator(RabbitStreamProvider streamProvider,
-                                                RoutingStreamProducer streamProducer) {
+    private static Coordinator startCoordinator(RabbitStreamProvider streamProvider) {
         var c = new Coordinator(new LeaderElectionImpl(lockRepo), streamReg, streamProvider,
-                sourceReg, sourceFactory, targetReg, sinkFactory, streamProducer, RESYNC_INTERVAL_MS);
+                sourceReg, sourceFactory, targetReg, sinkFactory, RESYNC_INTERVAL_MS);
         c.start();
         return c;
     }

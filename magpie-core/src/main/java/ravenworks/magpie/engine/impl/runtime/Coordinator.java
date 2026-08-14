@@ -14,7 +14,6 @@ import ravenworks.magpie.engine.api.source.SourceConnector;
 import ravenworks.magpie.engine.api.source.SourceDefinition;
 import ravenworks.magpie.engine.api.source.SourceFactory;
 import ravenworks.magpie.engine.api.source.SourceRegistry;
-import ravenworks.magpie.engine.api.stream.StreamProducer;
 import ravenworks.magpie.engine.api.stream.StreamProvider;
 import ravenworks.magpie.engine.api.stream.StreamRegistry;
 
@@ -50,7 +49,6 @@ public class Coordinator implements Lifecycle {
     private final SourceFactory sourceFactory;
     private final TargetRegistry targetRegistry;
     private final SinkFactory sinkFactory;
-    private final StreamProducer sourceProducer;
     private final long connectorShutdownTimeoutMs;
     private final Map<String, RunningSource> runningSources = new LinkedHashMap<>();
     private final Map<String, RunningSink> runningSinks = new LinkedHashMap<>();
@@ -62,10 +60,9 @@ public class Coordinator implements Lifecycle {
                        @NonNull SourceRegistry sourceRegistry,
                        @NonNull SourceFactory sourceFactory,
                        @NonNull TargetRegistry targetRegistry,
-                       @NonNull SinkFactory sinkFactory,
-                       @NonNull StreamProducer sourceProducer) {
+                       @NonNull SinkFactory sinkFactory) {
         this(leaderElection, streamRegistry, streamProvider,
-                sourceRegistry, sourceFactory, targetRegistry, sinkFactory, sourceProducer,
+                sourceRegistry, sourceFactory, targetRegistry, sinkFactory,
                 DEFAULT_RESYNC_INTERVAL_MS);
     }
 
@@ -76,10 +73,9 @@ public class Coordinator implements Lifecycle {
                        @NonNull SourceFactory sourceFactory,
                        @NonNull TargetRegistry targetRegistry,
                        @NonNull SinkFactory sinkFactory,
-                       @NonNull StreamProducer sourceProducer,
                        int resyncIntervalMs) {
         this(leaderElection, streamRegistry, streamProvider,
-                sourceRegistry, sourceFactory, targetRegistry, sinkFactory, sourceProducer,
+                sourceRegistry, sourceFactory, targetRegistry, sinkFactory,
                 resyncIntervalMs, CONNECTOR_SHUTDOWN_TIMEOUT_MS);
     }
 
@@ -90,7 +86,6 @@ public class Coordinator implements Lifecycle {
                 @NonNull SourceFactory sourceFactory,
                 @NonNull TargetRegistry targetRegistry,
                 @NonNull SinkFactory sinkFactory,
-                @NonNull StreamProducer sourceProducer,
                 int resyncIntervalMs,
                 long connectorShutdownTimeoutMs) {
         this.leaderElection = leaderElection;
@@ -100,7 +95,6 @@ public class Coordinator implements Lifecycle {
         this.sourceFactory = sourceFactory;
         this.targetRegistry = targetRegistry;
         this.sinkFactory = sinkFactory;
-        this.sourceProducer = sourceProducer;
         this.connectorShutdownTimeoutMs = connectorShutdownTimeoutMs;
         this.workLoop = new WorkLoop("Coordinator", resyncIntervalMs, this::dispatch);
         // 选举事件仅作触发器：入队后由 reconcile 重新读取 isLeader() 再收敛
@@ -248,7 +242,7 @@ public class Coordinator implements Lifecycle {
                 continue;
             }
             try {
-                var connector = this.sourceFactory.create(this.sourceProducer, definition);
+                var connector = this.sourceFactory.create(this.streamProvider, definition);
                 connector.start();
                 this.runningSources.put(definition.getName(), new RunningSource(definition, connector));
                 log.info("Source '{}' started", definition.getName());

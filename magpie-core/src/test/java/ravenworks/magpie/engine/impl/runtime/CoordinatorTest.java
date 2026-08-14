@@ -159,20 +159,6 @@ class CoordinatorTest {
     }
 
 
-    static class FakeStreamProducer implements StreamProducer {
-
-        @Override
-        public CompletableFuture<SendResult> send(MessageRecord record) {
-            return CompletableFuture.completedFuture(new SendResult().setSucceeded(true).setMessage(record));
-        }
-
-        @Override
-        public void close() {
-        }
-
-    }
-
-
     static class Harness {
 
         final FakeLeaderElection election = new FakeLeaderElection();
@@ -231,11 +217,11 @@ class CoordinatorTest {
                     ? new Coordinator(
                     this.election, streamRegistry, this.streamProvider,
                     sourceRegistry, sourceFactory, targetRegistry, sinkFactory,
-                    new FakeStreamProducer(), resyncIntervalMs, connectorShutdownTimeoutMs)
+                    resyncIntervalMs, connectorShutdownTimeoutMs)
                     : new Coordinator(
                     this.election, streamRegistry, this.streamProvider,
                     sourceRegistry, sourceFactory, targetRegistry, sinkFactory,
-                    new FakeStreamProducer(), resyncIntervalMs);
+                    resyncIntervalMs);
         }
 
         private static SourceDefinition source(String name, boolean enabled) {

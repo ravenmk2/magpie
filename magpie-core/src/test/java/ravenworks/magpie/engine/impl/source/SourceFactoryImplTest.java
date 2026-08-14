@@ -4,9 +4,10 @@ import org.junit.jupiter.api.Test;
 import ravenworks.magpie.engine.api.source.SourceConnector;
 import ravenworks.magpie.engine.api.source.SourceDefinition;
 import ravenworks.magpie.engine.api.source.SourceProvider;
-import ravenworks.magpie.engine.api.stream.MessageRecord;
-import ravenworks.magpie.engine.api.stream.SendResult;
+import ravenworks.magpie.engine.api.stream.StreamConsumer;
+import ravenworks.magpie.engine.api.stream.StreamDefinition;
 import ravenworks.magpie.engine.api.stream.StreamProducer;
+import ravenworks.magpie.engine.api.stream.StreamProvider;
 
 import java.util.List;
 import java.util.Map;
@@ -24,15 +25,14 @@ class SourceFactoryImplTest {
         SourceConnector connector = stubConnector("mysql", "source-1");
         var factory = new SourceFactoryImpl(List.of(stubProvider("mysql", connector)));
 
-        SourceConnector created = factory.create(stubStreamProducer(), definition("mysql"));
+        SourceConnector created = factory.create(stubStreamProvider(), definition("mysql"));
 
         assertSame(connector, created);
     }
 
     @Test
-    void forwardsNameAndPropertiesToProvider() {
-        var capturedName = new AtomicReference<String>();
-        var capturedProperties = new AtomicReference<Map<String, Object>>();
+    void forwardsDefinitionToProvider() {
+        var captured = new AtomicReference<SourceDefinition>();
         var provider = new SourceProvider() {
 
             @Override
@@ -41,20 +41,18 @@ class SourceFactoryImplTest {
             }
 
             @Override
-            public SourceConnector create(StreamProducer producer, String name, Map<String, Object> properties) {
-                capturedName.set(name);
-                capturedProperties.set(properties);
-                return stubConnector("mysql", name);
+            public SourceConnector create(StreamProvider p, SourceDefinition definition) {
+                captured.set(definition);
+                return stubConnector("mysql", definition.getName());
             }
         };
         var factory = new SourceFactoryImpl(List.of(provider));
         SourceDefinition definition = definition("mysql");
         definition.setProperties(Map.of("table", "outbox"));
 
-        factory.create(stubStreamProducer(), definition);
+        factory.create(stubStreamProvider(), definition);
 
-        assertEquals("source-mysql", capturedName.get());
-        assertEquals(Map.of("table", "outbox"), capturedProperties.get());
+        assertSame(definition, captured.get());
     }
 
     @Test
@@ -62,7 +60,7 @@ class SourceFactoryImplTest {
         var factory = new SourceFactoryImpl(List.of(stubProvider("mysql", stubConnector("mysql", "source-1"))));
 
         var e = assertThrows(IllegalArgumentException.class,
-                () -> factory.create(stubStreamProducer(), definition("http")));
+                () -> factory.create(stubStreamProvider(), definition("http")));
 
         assertTrue(e.getMessage().contains("http"));
     }
@@ -78,7 +76,7 @@ class SourceFactoryImplTest {
                 stubProvider("mysql", mysqlConnector, mysqlCreations),
                 stubProvider("http", httpConnector, httpCreations)));
 
-        SourceConnector created = factory.create(stubStreamProducer(), definition("http"));
+        SourceConnector created = factory.create(stubStreamProvider(), definition("http"));
 
         assertSame(httpConnector, created);
         assertEquals(0, mysqlCreations.get());
@@ -105,7 +103,7 @@ class SourceFactoryImplTest {
             }
 
             @Override
-            public SourceConnector create(StreamProducer producer, String name, Map<String, Object> properties) {
+            public SourceConnector create(StreamProvider provider, SourceDefinition definition) {
                 creations.incrementAndGet();
                 return connector;
             }
@@ -141,14 +139,26 @@ class SourceFactoryImplTest {
         };
     }
 
-    private static StreamProducer stubStreamProducer() {
-        return new StreamProducer() {
+    private static StreamProvider stubStreamProvider() {
+        return new StreamProvider() {
 
             @Override
-            public CompletableFuture<SendResult> send(MessageRecord record) {
-                return CompletableFuture.completedFuture(new SendResult()
-                        .setSucceeded(true)
-                        .setMessage(record));
+            public void create(StreamDefinition definition) {
+            }
+
+            @Override
+            public StreamProducer producer(StreamDefinition definition) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public List<StreamConsumer> consumer(StreamDefinition definition, String name) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public StreamConsumer consumer(StreamDefinition definition, int partition, String name) {
+                throw new UnsupportedOperationException();
             }
 
             @Override
