@@ -94,23 +94,21 @@ class MySqlPollSourceIT {
 
         var consumer = newConsumer(definition, "it-outbox-consumer-" + suffix);
         consumer.start();
-        try (StreamProducer producer = provider.producer(definition)) {
-            var connector = newConnector(producer, "it-mysql-poll-" + suffix, 200, 500);
-            connector.start();
-            try {
-                List<ConsumerRecord> received = pollUntil(consumer, 10);
-                for (int i = 0; i < 10; i++) {
-                    var message = received.get(i).getMessage();
-                    assertEquals("payload-" + i,
-                            new String(message.getPayload(), StandardCharsets.UTF_8));
-                    assertEquals("bk-" + i, message.getBusinessKey());
-                    assertEquals(stream, message.getTopic());
-                }
-                await().atMost(AWAIT).until(() -> outboxCount(stream) == 0);
-            } finally {
-                connector.shutdown().get(30, TimeUnit.SECONDS);
+        // producer 所有权归 connector：shutdown 时由连接器关闭，调用方不再关
+        var connector = newConnector(provider.producer(definition), "it-mysql-poll-" + suffix, 200, 500);
+        connector.start();
+        try {
+            List<ConsumerRecord> received = pollUntil(consumer, 10);
+            for (int i = 0; i < 10; i++) {
+                var message = received.get(i).getMessage();
+                assertEquals("payload-" + i,
+                        new String(message.getPayload(), StandardCharsets.UTF_8));
+                assertEquals("bk-" + i, message.getBusinessKey());
+                assertEquals(stream, message.getTopic());
             }
+            await().atMost(AWAIT).until(() -> outboxCount(stream) == 0);
         } finally {
+            connector.shutdown().get(30, TimeUnit.SECONDS);
             consumer.stop();
         }
     }
@@ -127,25 +125,22 @@ class MySqlPollSourceIT {
 
         var consumer = newConsumer(definition, "it-readlag-consumer-" + suffix);
         consumer.start();
-        try (StreamProducer producer = provider.producer(definition)) {
-            var connector = newConnector(producer, "it-mysql-readlag-" + suffix, 200, 1500);
-            connector.start();
-            try {
-                List<ConsumerRecord> early = new ArrayList<>();
-                long deadline = System.nanoTime() + Duration.ofMillis(600).toNanos();
-                while (System.nanoTime() < deadline) {
-                    early.addAll(consumer.poll(10, Duration.ofMillis(100)));
-                }
-                assertTrue(early.isEmpty(), "readLag 窗口内新行不应被投递");
-
-                List<ConsumerRecord> received = pollUntil(consumer, 1);
-                assertEquals("payload-0",
-                        new String(received.get(0).getMessage().getPayload(), StandardCharsets.UTF_8));
-                await().atMost(AWAIT).until(() -> outboxCount(stream) == 0);
-            } finally {
-                connector.shutdown().get(30, TimeUnit.SECONDS);
+        var connector = newConnector(provider.producer(definition), "it-mysql-readlag-" + suffix, 200, 1500);
+        connector.start();
+        try {
+            List<ConsumerRecord> early = new ArrayList<>();
+            long deadline = System.nanoTime() + Duration.ofMillis(600).toNanos();
+            while (System.nanoTime() < deadline) {
+                early.addAll(consumer.poll(10, Duration.ofMillis(100)));
             }
+            assertTrue(early.isEmpty(), "readLag 窗口内新行不应被投递");
+
+            List<ConsumerRecord> received = pollUntil(consumer, 1);
+            assertEquals("payload-0",
+                    new String(received.get(0).getMessage().getPayload(), StandardCharsets.UTF_8));
+            await().atMost(AWAIT).until(() -> outboxCount(stream) == 0);
         } finally {
+            connector.shutdown().get(30, TimeUnit.SECONDS);
             consumer.stop();
         }
     }
@@ -167,12 +162,13 @@ class MySqlPollSourceIT {
 
         var consumer = newConsumer(definition, "it-crash-consumer-" + suffix);
         consumer.start();
-        try (StreamProducer producer = provider.producer(definition)) {
+        try {
             // 触发器先就位：connector1 发送成功后 deleteBatch 必失败，行留在表内
             // （test 用户无 SUPER，binlog 开启时 CREATE TRIGGER 报 1419，DDL 走 root 连接）
             executeAsRoot("CREATE TRIGGER it_sabotage_delete BEFORE DELETE ON " + TABLE
                     + " FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'sabotaged delete'");
-            var connector1 = newConnector(producer, "it-mysql-crash1-" + suffix, 200, 500);
+            // producer 所有权归 connector：shutdown 时由连接器关闭，调用方不再关
+            var connector1 = newConnector(provider.producer(definition), "it-mysql-crash1-" + suffix, 200, 500);
             List<ConsumerRecord> received = new ArrayList<>();
             try {
                 connector1.start();
@@ -192,7 +188,7 @@ class MySqlPollSourceIT {
             assertEquals(3, perIdAfterCrash.size());
 
             // connector2 接管同一 outbox 表、同一 stream：重投同 id 消息后删行成功
-            var connector2 = newConnector(producer, "it-mysql-crash2-" + suffix, 200, 500);
+            var connector2 = newConnector(provider.producer(definition), "it-mysql-crash2-" + suffix, 200, 500);
             connector2.start();
             try {
                 await().atMost(AWAIT).until(() -> {
@@ -254,31 +250,28 @@ class MySqlPollSourceIT {
 
             var consumer = newConsumer(definition, "it-tx-consumer-" + suffix);
             consumer.start();
-            try (StreamProducer producer = provider.producer(definition)) {
-                var connector = newConnector(producer, "it-mysql-tx-" + suffix, 200, 500);
-                connector.start();
-                try {
-                    List<ConsumerRecord> received = new ArrayList<>();
-                    // 超过 readLag + 若干 poll 周期：未提交行对 poller 与其他连接均不可见
-                    await().during(Duration.ofSeconds(2)).atMost(AWAIT).until(() -> {
-                        received.addAll(consumer.poll(10, Duration.ofMillis(100)));
-                        return received.isEmpty() && outboxCount(stream) == 0;
-                    });
+            var connector = newConnector(provider.producer(definition), "it-mysql-tx-" + suffix, 200, 500);
+            connector.start();
+            try {
+                List<ConsumerRecord> received = new ArrayList<>();
+                // 超过 readLag + 若干 poll 周期：未提交行对 poller 与其他连接均不可见
+                await().during(Duration.ofSeconds(2)).atMost(AWAIT).until(() -> {
+                    received.addAll(consumer.poll(10, Duration.ofMillis(100)));
+                    return received.isEmpty() && outboxCount(stream) == 0;
+                });
 
-                    txConnection.commit();
+                txConnection.commit();
 
-                    // 提交后立即可见（created_at 早已越过 readLag），按插入序送达并删除
-                    pollUntil(consumer, received, 3);
-                    for (int i = 0; i < 3; i++) {
-                        assertEquals("payload-" + i,
-                                new String(received.get(i).getMessage().getPayload(),
-                                        StandardCharsets.UTF_8));
-                    }
-                    await().atMost(AWAIT).until(() -> outboxCount(stream) == 0);
-                } finally {
-                    connector.shutdown().get(30, TimeUnit.SECONDS);
+                // 提交后立即可见（created_at 早已越过 readLag），按插入序送达并删除
+                pollUntil(consumer, received, 3);
+                for (int i = 0; i < 3; i++) {
+                    assertEquals("payload-" + i,
+                            new String(received.get(i).getMessage().getPayload(),
+                                    StandardCharsets.UTF_8));
                 }
+                await().atMost(AWAIT).until(() -> outboxCount(stream) == 0);
             } finally {
+                connector.shutdown().get(30, TimeUnit.SECONDS);
                 consumer.stop();
             }
         } finally {
