@@ -58,7 +58,7 @@ class RabbitStreamIT {
 
     @BeforeAll
     static void setUp() {
-        provider = new RabbitStreamProvider(List.of(TestRabbitMq.streamUri()), OFFSET_TRACKER);
+        provider = new RabbitStreamProvider(TestRabbitMq.streamOptions(), OFFSET_TRACKER);
     }
 
     @AfterAll

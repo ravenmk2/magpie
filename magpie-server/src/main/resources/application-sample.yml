@@ -42,4 +42,6 @@ management:
 magpie:
   rabbitmq-stream:
     uris:
-      - rabbitmq-stream://guest:guest@${RABBITMQ_HOST:rabbitmq}:5552/%2f
+      - rabbitmq-stream://${RABBITMQ_HOST:rabbitmq}:5552/%2f
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}

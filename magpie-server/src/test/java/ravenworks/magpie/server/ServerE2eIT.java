@@ -111,8 +111,9 @@ class ServerE2eIT {
         registry.add("spring.datasource.driver-class-name", () -> "com.mysql.cj.jdbc.Driver");
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "validate");
         registry.add("magpie.rabbitmq-stream.uris", () -> "rabbitmq-stream://"
-                + RABBITMQ.getAdminUsername() + ":" + RABBITMQ.getAdminPassword()
-                + "@" + RABBITMQ.getHost() + ":" + RABBITMQ.getMappedPort(STREAM_PORT) + "/%2f");
+                + RABBITMQ.getHost() + ":" + RABBITMQ.getMappedPort(STREAM_PORT) + "/%2f");
+        registry.add("magpie.rabbitmq-stream.username", RABBITMQ::getAdminUsername);
+        registry.add("magpie.rabbitmq-stream.password", RABBITMQ::getAdminPassword);
     }
 
     @Autowired

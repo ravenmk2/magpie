@@ -15,6 +15,10 @@ import java.util.List;
 @ConfigurationProperties("magpie.rabbitmq-stream")
 public class RabbitStreamProperties implements Serializable {
 
-    private List<URI> uris = List.of(URI.create("rabbitmq-stream://guest:guest@localhost:5552/%2f"));
+    private List<URI> uris = List.of(URI.create("rabbitmq-stream://localhost:5552/%2f"));
+
+    private String username = "guest";
+
+    private String password = "guest";
 
 }

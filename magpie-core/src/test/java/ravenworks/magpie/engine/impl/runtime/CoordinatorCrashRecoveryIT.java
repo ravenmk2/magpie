@@ -106,7 +106,7 @@ class CoordinatorCrashRecoveryIT {
         targetReg = new TargetRegistryImpl(targetRepo);
         var tracker = new OffsetTrackerImpl(offsetRepo);
         retryStore = new RetryMessageStoreImpl(msgLogRepo, retryRepo);
-        provider = new RabbitStreamProvider(List.of(TestRabbitMq.streamUri()), tracker);
+        provider = new RabbitStreamProvider(TestRabbitMq.streamOptions(), tracker);
         producer = new RoutingStreamProducer(provider, streamReg);
         router = new HttpSourceRouterImpl();
         sourceFactory = new SourceFactoryImpl(List.of(new HttpSourceProvider(router)));
@@ -210,7 +210,7 @@ class CoordinatorCrashRecoveryIT {
 
         // 新 provider + 新 Coordinator 接管同一个 DB 和同一个 broker
         var tracker = new OffsetTrackerImpl(context.getBean(ConsumerOffsetRepository.class));
-        recoveryProvider = new RabbitStreamProvider(List.of(TestRabbitMq.streamUri()), tracker);
+        recoveryProvider = new RabbitStreamProvider(TestRabbitMq.streamOptions(), tracker);
         recoveryProducer = new RoutingStreamProducer(recoveryProvider, streamReg);
         recoveryCoordinator = startCoordinator(recoveryProvider, recoveryProducer);
 

@@ -21,13 +21,15 @@ public class RabbitStreamProvider implements StreamProvider {
     private final Environment environment;
     private final OffsetTracker offsetTracker;
 
-    public RabbitStreamProvider(@NonNull List<URI> uris,
+    public RabbitStreamProvider(@NonNull RabbitStreamOptions options,
                                 @NonNull OffsetTracker offsetTracker) {
         this.offsetTracker = offsetTracker;
         this.environment = Environment.builder()
                 .id("magpie")
-                .uris(uris.stream().map(URI::toString).toList())
-                .addressResolver(new RoundRobinAddressResolver(uris))
+                .uris(options.getUris().stream().map(URI::toString).toList())
+                .username(options.getUsername())
+                .password(options.getPassword())
+                .addressResolver(new RoundRobinAddressResolver(options.getUris()))
                 .build();
     }
 

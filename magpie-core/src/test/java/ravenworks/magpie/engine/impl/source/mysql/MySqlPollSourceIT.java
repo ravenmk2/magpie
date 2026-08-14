@@ -71,7 +71,7 @@ class MySqlPollSourceIT {
             ScriptUtils.executeSqlScript(connection, new FileSystemResource(OUTBOX_SQL));
         }
         jdbc = new JdbcTemplate(dataSource);
-        provider = new RabbitStreamProvider(List.of(TestRabbitMq.streamUri()), OFFSET_TRACKER);
+        provider = new RabbitStreamProvider(TestRabbitMq.streamOptions(), OFFSET_TRACKER);
     }
 
     @AfterAll

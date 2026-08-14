@@ -97,7 +97,7 @@ class CoordinatorE2eIT {
         targetReg = new TargetRegistryImpl(targetRepo);
         var tracker = new OffsetTrackerImpl(offsetRepo);
         retryStore = new RetryMessageStoreImpl(msgLogRepo, retryRepo);
-        provider = new RabbitStreamProvider(List.of(TestRabbitMq.streamUri()), tracker);
+        provider = new RabbitStreamProvider(TestRabbitMq.streamOptions(), tracker);
         producer = new RoutingStreamProducer(provider, streamReg);
         router = new HttpSourceRouterImpl();
         sourceFactory = new SourceFactoryImpl(List.of(new HttpSourceProvider(router)));

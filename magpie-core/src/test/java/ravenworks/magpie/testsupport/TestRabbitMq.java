@@ -5,9 +5,11 @@ package ravenworks.magpie.testsupport;
 
 import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.utility.DockerImageName;
+import ravenworks.magpie.engine.impl.rabbitmq.RabbitStreamOptions;
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.List;
 
 
 /**
@@ -34,13 +36,22 @@ public final class TestRabbitMq {
     }
 
     /**
-     * rabbitmq-stream:// URI，格式与生产配置 magpie.rabbitmq-stream.uris 一致
-     * （见 RabbitStreamProperties 默认值）。
+     * rabbitmq-stream:// URI（不含 userinfo），格式与生产配置 magpie.rabbitmq-stream.uris
+     * 一致（见 RabbitStreamProperties 默认值）；凭据经 {@link #streamOptions()} 单独传入。
      */
     public static URI streamUri() {
-        return URI.create("rabbitmq-stream://" + CONTAINER.getAdminUsername() + ":"
-                + CONTAINER.getAdminPassword() + "@" + CONTAINER.getHost() + ":"
+        return URI.create("rabbitmq-stream://" + CONTAINER.getHost() + ":"
                 + CONTAINER.getMappedPort(STREAM_PORT) + "/%2f");
+    }
+
+    /**
+     * 指向共享容器的连接选项：URI 来自 {@link #streamUri()}，凭据为容器管理员账号。
+     */
+    public static RabbitStreamOptions streamOptions() {
+        return new RabbitStreamOptions()
+                .setUris(List.of(streamUri()))
+                .setUsername(CONTAINER.getAdminUsername())
+                .setPassword(CONTAINER.getAdminPassword());
     }
 
 }

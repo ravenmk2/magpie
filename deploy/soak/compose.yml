@@ -73,9 +73,11 @@ services:
       MYSQL_HOST: mysql
       MYSQL_USERNAME: root
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-magpie-soak}
-      MAGPIE_RABBITMQSTREAM_URIS_0: rabbitmq-stream://${RABBITMQ_USER:-magpie}:${RABBITMQ_PASSWORD:-magpie}@rabbitmq-1:5552/%2f
-      MAGPIE_RABBITMQSTREAM_URIS_1: rabbitmq-stream://${RABBITMQ_USER:-magpie}:${RABBITMQ_PASSWORD:-magpie}@rabbitmq-2:5552/%2f
-      MAGPIE_RABBITMQSTREAM_URIS_2: rabbitmq-stream://${RABBITMQ_USER:-magpie}:${RABBITMQ_PASSWORD:-magpie}@rabbitmq-3:5552/%2f
+      MAGPIE_RABBITMQSTREAM_URIS_0: rabbitmq-stream://rabbitmq-1:5552/%2f
+      MAGPIE_RABBITMQSTREAM_URIS_1: rabbitmq-stream://rabbitmq-2:5552/%2f
+      MAGPIE_RABBITMQSTREAM_URIS_2: rabbitmq-stream://rabbitmq-3:5552/%2f
+      MAGPIE_RABBITMQSTREAM_USERNAME: ${RABBITMQ_USER:-magpie}
+      MAGPIE_RABBITMQSTREAM_PASSWORD: ${RABBITMQ_PASSWORD:-magpie}
       TZ: Asia/Shanghai
     depends_on:
       mysql:
