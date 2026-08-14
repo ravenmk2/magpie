@@ -17,7 +17,7 @@ query、`docs/database/schema.sql` 在真实 MySQL 上的可执行性）。
   `docs/database/schema.sql`，不维护副本） 并 TRUNCATE 全部 magpie_* 表，每个测试类在 @BeforeAll 调用做隔离。
 - `TestRabbitMq` — 共享 RabbitMQ 容器（singleton），`withPluginsEnabled("rabbitmq_stream")` 启用 stream 插件，
   `streamUri()` 返回与生产配置同格式的 `rabbitmq-stream://` URI（不含 userinfo），`streamOptions()` 返回带容器管理员凭据的
-  `RabbitStreamOptions`。
+  `RabbitStreamOptions`（含 advertised 地址映射：容器 hostname 宿主机不可解析，映射到宿主映射端口）。
 - `TestJpa` — 最小 Spring 上下文（真实 Hibernate + Spring Data JPA，不依赖 Spring Boot），
   `hbm2ddl=none`，表结构一律来自 schema.sql。
 - `RecordingSinkProvider` / `RecordingSinkHandler` — 录制型 Sink：按 http sink 同款链路装配 （SinkWorker + 三种

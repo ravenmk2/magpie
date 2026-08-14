@@ -1,11 +1,13 @@
 package ravenworks.magpie.engine.impl.rabbitmq;
 
+import com.rabbitmq.stream.Address;
 import lombok.Data;
 import lombok.experimental.Accessors;
 
 import java.io.Serializable;
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
 
 
 /**
@@ -24,5 +26,11 @@ public class RabbitStreamOptions implements Serializable {
     private String username = "guest";
 
     private String password = "guest";
+
+    /**
+     * advertised 地址（key）到实际可达地址（value）的映射；空表表示不安装
+     * AddressResolver，使用 client 默认解析（原样使用 advertised 地址）
+     */
+    private Map<Address, Address> addressMappings = Map.of();
 
 }

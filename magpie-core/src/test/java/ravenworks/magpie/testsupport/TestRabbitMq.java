@@ -3,6 +3,7 @@ package ravenworks.magpie.testsupport;
 // 新版 org.testcontainers.rabbitmq.RabbitMQContainer（2.x）移除了 withPluginsEnabled，
 // 启用 stream 插件仍需使用兼容层中的旧类。
 
+import com.rabbitmq.stream.Address;
 import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.utility.DockerImageName;
 import ravenworks.magpie.engine.impl.rabbitmq.RabbitStreamOptions;
@@ -10,6 +11,7 @@ import ravenworks.magpie.engine.impl.rabbitmq.RabbitStreamOptions;
 import java.net.URI;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 
 
 /**
@@ -46,12 +48,23 @@ public final class TestRabbitMq {
 
     /**
      * 指向共享容器的连接选项：URI 来自 {@link #streamUri()}，凭据为容器管理员账号。
+     * 容器 hostname 在宿主机上不可解析，必须显式配置 advertised 地址映射，
+     * 否则 client 按 metadata 提示连接容器 hostname 会失败。
      */
     public static RabbitStreamOptions streamOptions() {
         return new RabbitStreamOptions()
                 .setUris(List.of(streamUri()))
                 .setUsername(CONTAINER.getAdminUsername())
-                .setPassword(CONTAINER.getAdminPassword());
+                .setPassword(CONTAINER.getAdminPassword())
+                .setAddressMappings(Map.of(advertisedAddress(),
+                        new Address(CONTAINER.getHost(), CONTAINER.getMappedPort(STREAM_PORT))));
+    }
+
+    /**
+     * 容器内 broker 对外 advertised 的地址：容器 hostname（Docker 默认为短容器 id）+ stream 端口
+     */
+    public static Address advertisedAddress() {
+        return new Address(CONTAINER.getContainerInfo().getConfig().getHostName(), STREAM_PORT);
     }
 
 }

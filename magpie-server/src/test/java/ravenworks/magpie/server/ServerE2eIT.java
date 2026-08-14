@@ -114,6 +114,10 @@ class ServerE2eIT {
                 + RABBITMQ.getHost() + ":" + RABBITMQ.getMappedPort(STREAM_PORT) + "/%2f");
         registry.add("magpie.rabbitmq-stream.username", RABBITMQ::getAdminUsername);
         registry.add("magpie.rabbitmq-stream.password", RABBITMQ::getAdminPassword);
+        // 容器 hostname 在测试 JVM 侧不可解析，把 advertised 地址映射到宿主映射地址
+        registry.add("magpie.rabbitmq-stream.address-mappings["
+                        + RABBITMQ.getContainerInfo().getConfig().getHostName() + ":" + STREAM_PORT + "]",
+                () -> RABBITMQ.getHost() + ":" + RABBITMQ.getMappedPort(STREAM_PORT));
     }
 
     @Autowired

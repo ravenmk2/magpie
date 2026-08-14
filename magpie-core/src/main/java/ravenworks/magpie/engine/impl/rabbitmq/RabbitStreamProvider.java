@@ -4,6 +4,7 @@ import com.rabbitmq.stream.Environment;
 import com.rabbitmq.stream.StreamCreator;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
+import ravenworks.magpie.common.runtime.InstanceId;
 import ravenworks.magpie.engine.api.stream.*;
 
 import java.net.URI;
@@ -24,13 +25,17 @@ public class RabbitStreamProvider implements StreamProvider {
     public RabbitStreamProvider(@NonNull RabbitStreamOptions options,
                                 @NonNull OffsetTracker offsetTracker) {
         this.offsetTracker = offsetTracker;
-        this.environment = Environment.builder()
-                .id("magpie")
+        var builder = Environment.builder()
+                .id("magpie-" + InstanceId.SHORT)
                 .uris(options.getUris().stream().map(URI::toString).toList())
                 .username(options.getUsername())
-                .password(options.getPassword())
-                .addressResolver(new RoundRobinAddressResolver(options.getUris()))
-                .build();
+                .password(options.getPassword());
+        // 无映射时用 client 默认解析（透传 advertised 地址；localhost+guest 时 client 自动强制
+        // localhost 方便本地开发）；有映射时把不可达的 advertised 地址翻译成实际可达地址
+        if (!options.getAddressMappings().isEmpty()) {
+            builder.addressResolver(new MappedAddressResolver(options.getAddressMappings()));
+        }
+        this.environment = builder.build();
     }
 
     @Override

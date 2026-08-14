@@ -45,3 +45,7 @@ magpie:
       - rabbitmq-stream://${RABBITMQ_HOST:rabbitmq}:5552/%2f
     username: ${RABBITMQ_USER:guest}
     password: ${RABBITMQ_PASSWORD:guest}
+    # broker metadata 返回的 advertised 地址不可达时（如集群在 Docker 中，经宿主映射端口访问）
+    # 按需配置 advertised host:port → 实际可达 host:port；未列出的地址原样使用，空表为默认透传
+    # address-mappings:
+    #   "rabbitmq-1:5552": "192.168.1.10:15552"
