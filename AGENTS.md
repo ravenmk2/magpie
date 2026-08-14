@@ -9,9 +9,11 @@ docs/
 ├── architecture.md          # 架构概览（技术栈、Maven 模块、包结构）
 ├── delivery-mode.md         # 三种投递模式（ORDERED / KEY_ORDERED / BEST_EFFORT）的语义与机制
 ├── testing.md               # 测试分层（单测 *Test / 集成 *IT）、Testcontainers 基建与运行方式
-└── database/
-    ├── schema.sql           # 核心库建表脚本
-    └── source-mysql.sql     # MySQL Source 的 outbox 表建表脚本
+├── database/
+│   ├── schema.sql           # 核心库建表脚本
+│   └── source-mysql.sql     # MySQL Source 的 outbox 表建表脚本
+└── convention/
+    └── java.md              # Java 编码规范（实例成员访问必须加 this. 前缀）
 ```
 
 ## 测试

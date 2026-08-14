@@ -299,7 +299,7 @@ public final class JpaTestSupport implements AutoCloseable {
         }
 
         E save(JdbcTemplate jdbc, E entity) {
-            if (findById(jdbc, this.idOf.apply(entity)).isPresent()) {
+            if (this.findById(jdbc, this.idOf.apply(entity)).isPresent()) {
                 jdbc.update(this.updateSql, this.updateArgs.apply(entity));
             } else {
                 jdbc.update(this.insertSql, this.insertArgs.apply(entity));

@@ -60,30 +60,30 @@ public class VerifyController {
     public ResponseEntity<Void> receive(@PathVariable String channel, @RequestBody byte[] body) {
         SequenceTracker tracker = this.trackers.get(channel);
         if (tracker == null) {
-            invalid(channel, "unknown channel");
+            this.invalid(channel, "unknown channel");
             return ResponseEntity.noContent().build();
         }
         try {
             CloudEvent event = JSON_FORMAT.deserialize(body);
             if (event.getData() == null) {
-                invalid(channel, "event without data");
+                this.invalid(channel, "event without data");
                 return ResponseEntity.noContent().build();
             }
             ProbeMessage probe = ProbeFactory.parse(event.getData().toBytes());
             if (probe.key() == null || probe.key().isBlank()) {
-                invalid(channel, "probe without key");
+                this.invalid(channel, "probe without key");
                 return ResponseEntity.noContent().build();
             }
             Object businessKey = event.getExtension(ProbeFactory.EXT_BUSINESS_KEY);
             if (businessKey == null || !businessKey.toString().equals(probe.key())) {
-                invalid(channel, "xbusinesskey mismatch");
+                this.invalid(channel, "xbusinesskey mismatch");
                 return ResponseEntity.noContent().build();
             }
             long now = System.currentTimeMillis();
             tracker.onProbe(probe.key(), probe.seq(), now);
             this.latencyTimers.get(channel).record(Duration.ofMillis(Math.max(0, now - probe.sentAt())));
         } catch (Exception e) {
-            invalid(channel, e.getMessage());
+            this.invalid(channel, e.getMessage());
         }
         return ResponseEntity.noContent().build();
     }

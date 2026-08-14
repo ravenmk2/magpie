@@ -71,11 +71,11 @@ public class RabbitStreamConsumer implements StreamConsumer {
                 .builder()
                 .manualTrackingStrategy()
                 .builder()
-                .subscriptionListener(ctx -> ctx.offsetSpecification(trackedOffset()))
+                .subscriptionListener(ctx -> ctx.offsetSpecification(this.trackedOffset()))
                 // SAC 激活（首次激活与接管）时 broker 会再询问一次起始 offset（consumer update）。
                 // 默认实现只查服务端存储的 offset，本项目不走服务端跟踪，会回退到 next()
                 // 跳过全部存量消息；这里与 subscriptionListener 保持一致，统一以 OffsetTracker 为准
-                .consumerUpdateListener(ctx -> ctx.isActive() ? trackedOffset() : null)
+                .consumerUpdateListener(ctx -> ctx.isActive() ? this.trackedOffset() : null)
                 .messageHandler((ctx, msg) -> {
                     try {
                         this.queue.put(new QueuedItem(ctx, msg));

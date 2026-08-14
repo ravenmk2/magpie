@@ -52,7 +52,7 @@ public class OutboxSeeder implements SmartLifecycle {
         this.executor = Executors.newVirtualThreadPerTaskExecutor();
         for (int i = 0; i < this.props.getKeyCount(); i++) {
             String key = this.runId + "-k" + i;
-            this.executor.submit(() -> runChain(key));
+            this.executor.submit(() -> this.runChain(key));
         }
         log.info("outbox seeder started: runId={}, topic={}, keys={}, rate={}/s",
                 this.runId, this.props.getTopic(), this.props.getKeyCount(), this.props.getRatePerSec());
@@ -63,7 +63,7 @@ public class OutboxSeeder implements SmartLifecycle {
         long seq = 0;
         while (this.running.get()) {
             seq++;
-            try (var connection = connect();
+            try (var connection = this.connect();
                  PreparedStatement ps = connection.prepareStatement(INSERT)) {
                 ps.setString(1, ProbeFactory.newId());
                 ps.setString(2, ProbeFactory.EVENT_TYPE);
@@ -76,10 +76,10 @@ public class OutboxSeeder implements SmartLifecycle {
                 this.errorCounter.increment();
                 log.warn("outbox insert failed for key={}, retrying same seq: {}", key, e.toString());
                 seq--;
-                sleep(2_000);
+                this.sleep(2_000);
                 continue;
             }
-            sleep(interval);
+            this.sleep(interval);
         }
     }
 
@@ -95,7 +95,7 @@ public class OutboxSeeder implements SmartLifecycle {
                 if (System.currentTimeMillis() > deadline) {
                     throw e;
                 }
-                sleep(1_000);
+                this.sleep(1_000);
             }
         }
     }

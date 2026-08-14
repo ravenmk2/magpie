@@ -46,7 +46,7 @@ class SequenceTrackerTest {
 
     @Test
     void strictContiguousDelivery() {
-        var tracker = tracker(STRICT);
+        var tracker = this.tracker(STRICT);
         for (long seq = 1; seq <= 5; seq++) {
             tracker.onProbe("k1", seq, 0);
         }
@@ -60,7 +60,7 @@ class SequenceTrackerTest {
     @Test
     void strictDuplicateIsAllowed() {
         // at-least-once 重投/重放：旧 seq 重复到达不判违规
-        var tracker = tracker(STRICT);
+        var tracker = this.tracker(STRICT);
         tracker.onProbe("k1", 1, 0);
         tracker.onProbe("k1", 2, 0);
         tracker.onProbe("k1", 1, 0);
@@ -75,7 +75,7 @@ class SequenceTrackerTest {
     @Test
     void strictGapIsOutOfOrderAndResyncs() {
         // 首次见到 seq 4 时 3 从未到达：有人越序；重同步后 5 不再级联误报
-        var tracker = tracker(STRICT);
+        var tracker = this.tracker(STRICT);
         tracker.onProbe("k1", 1, 0);
         tracker.onProbe("k1", 2, 0);
         tracker.onProbe("k1", 4, 0);
@@ -88,7 +88,7 @@ class SequenceTrackerTest {
     @Test
     void firstSeenSeqEstablishesBaseline() {
         // verifier 晚于 loadgen 启动：首个到达的 seq 之前的缺口不误报
-        var tracker = tracker(STRICT);
+        var tracker = this.tracker(STRICT);
         tracker.onProbe("k1", 100, 0);
         tracker.onProbe("k1", 101, 0);
         var s = tracker.snapshot();
@@ -98,7 +98,7 @@ class SequenceTrackerTest {
 
     @Test
     void relaxedBuffersReorderAndFills() {
-        var tracker = tracker(RELAXED);
+        var tracker = this.tracker(RELAXED);
         tracker.onProbe("k1", 1, 0);
         tracker.onProbe("k1", 3, 0);
         tracker.onProbe("k1", 4, 0);
@@ -112,7 +112,7 @@ class SequenceTrackerTest {
 
     @Test
     void relaxedDuplicateInPending() {
-        var tracker = tracker(RELAXED);
+        var tracker = this.tracker(RELAXED);
         tracker.onProbe("k1", 1, 0);
         tracker.onProbe("k1", 3, 0);
         tracker.onProbe("k1", 3, 0);
@@ -121,7 +121,7 @@ class SequenceTrackerTest {
 
     @Test
     void relaxedGapTimeoutCountsLost() {
-        var tracker = tracker(RELAXED);
+        var tracker = this.tracker(RELAXED);
         tracker.onProbe("k1", 1, 0);
         tracker.onProbe("k1", 4, 0); // 缺 2、3
         tracker.sweep(GAP_TIMEOUT + 1);
@@ -134,7 +134,7 @@ class SequenceTrackerTest {
 
     @Test
     void relaxedPendingOverflowForcesGapClose() {
-        var tracker = tracker(RELAXED);
+        var tracker = this.tracker(RELAXED);
         tracker.onProbe("k1", 1, 0);
         for (long seq = 3; seq <= 3 + MAX_PENDING; seq++) {
             tracker.onProbe("k1", seq, 0);
@@ -145,7 +145,7 @@ class SequenceTrackerTest {
 
     @Test
     void staleKeysAreEvicted() {
-        var tracker = tracker(STRICT);
+        var tracker = this.tracker(STRICT);
         tracker.onProbe("k1", 1, 0);
         tracker.onProbe("k2", 1, STALE);
         tracker.sweep(STALE + 1);
@@ -154,7 +154,7 @@ class SequenceTrackerTest {
 
     @Test
     void keysAreIndependent() {
-        var tracker = tracker(STRICT);
+        var tracker = this.tracker(STRICT);
         tracker.onProbe("k1", 1, 0);
         tracker.onProbe("k2", 1, 0);
         tracker.onProbe("k2", 2, 0);
@@ -165,7 +165,7 @@ class SequenceTrackerTest {
 
     @Test
     void listenerReceivesVerdicts() {
-        var tracker = tracker(RELAXED);
+        var tracker = this.tracker(RELAXED);
         tracker.onProbe("k1", 1, 0);
         tracker.onProbe("k1", 3, 0);
         tracker.onProbe("k1", 3, 0);

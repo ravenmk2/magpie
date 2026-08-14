@@ -136,10 +136,10 @@ class ServerE2eIT {
 
     @Test
     void structuredCloudEventFlowsToStreamAndSink() {
-        awaitSourceReady();
-        long offsetBefore = committedOffset();
+        this.awaitSourceReady();
+        long offsetBefore = this.committedOffset();
 
-        ResponseEntity<String> response = postStructured(TOPIC, "{\"orderId\":\"o-1\"}", String.class);
+        ResponseEntity<String> response = this.postStructured(TOPIC, "{\"orderId\":\"o-1\"}", String.class);
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertNotNull(response.getBody());
         // 统一响应信封：成功 success=true、error 为 null、data 为对象
@@ -151,9 +151,9 @@ class ServerE2eIT {
         Awaitility.await()
                 .atMost(Duration.ofSeconds(60))
                 .pollInterval(Duration.ofSeconds(1))
-                .untilAsserted(() -> assertTrue(committedOffset() > offsetBefore,
+                .untilAsserted(() -> assertTrue(this.committedOffset() > offsetBefore,
                         "expected committed offset > " + offsetBefore + " for target " + TARGET
-                                + ", got " + committedOffset()));
+                                + ", got " + this.committedOffset()));
     }
 
     /**
@@ -167,7 +167,7 @@ class ServerE2eIT {
 
     @Test
     void binaryModeCloudEventAccepted() {
-        awaitSourceReady();
+        this.awaitSourceReady();
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -186,9 +186,9 @@ class ServerE2eIT {
 
     @Test
     void disallowedTopicRejected() {
-        awaitSourceReady();
+        this.awaitSourceReady();
 
-        ResponseEntity<ApiResponse> response = postStructured(
+        ResponseEntity<ApiResponse> response = this.postStructured(
                 "server-e2e-others", "{\"orderId\":\"o-3\"}", ApiResponse.class);
         assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
         assertNotNull(response.getBody());
@@ -201,10 +201,10 @@ class ServerE2eIT {
      */
     @Test
     void overlongFieldsRejected() {
-        awaitSourceReady();
+        this.awaitSourceReady();
 
         // id 上限 32（magpie_message_log.message_id CHAR(32)）
-        ResponseEntity<ApiResponse> badId = postStructured(SOURCE, TOPIC, "a".repeat(33), null,
+        ResponseEntity<ApiResponse> badId = this.postStructured(SOURCE, TOPIC, "a".repeat(33), null,
                 "{\"orderId\":\"o-bad-id\"}", ApiResponse.class);
         assertEquals(HttpStatus.BAD_REQUEST, badId.getStatusCode());
         assertNotNull(badId.getBody());
@@ -213,7 +213,7 @@ class ServerE2eIT {
                 "expected field name in message, got: " + badId.getBody().error().message());
 
         // businessKey 上限 256（magpie_message_log.business_key VARCHAR(256)）
-        ResponseEntity<ApiResponse> badKey = postStructured(SOURCE, TOPIC, id32(), "b".repeat(257),
+        ResponseEntity<ApiResponse> badKey = this.postStructured(SOURCE, TOPIC, id32(), "b".repeat(257),
                 "{\"orderId\":\"o-bad-key\"}", ApiResponse.class);
         assertEquals(HttpStatus.BAD_REQUEST, badKey.getStatusCode());
         assertNotNull(badKey.getBody());
@@ -229,19 +229,19 @@ class ServerE2eIT {
     @Test
     void sourceDeregistrationReturns503() {
         // 从未播种的 source：router 无订阅者
-        ResponseEntity<ApiResponse> unknown = postStructured("server-e2e-ghost", TOPIC, id32(), null,
+        ResponseEntity<ApiResponse> unknown = this.postStructured("server-e2e-ghost", TOPIC, id32(), null,
                 "{\"orderId\":\"o-4\"}", ApiResponse.class);
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, unknown.getStatusCode());
         assertNotNull(unknown.getBody());
         assertEquals("no_subscriber_error", unknown.getBody().error().code());
 
         // 播种专用 source/topic，等 reconcile 挂上 router 后 200
-        seedTopicAndSource(TOGGLE_TOPIC, TOGGLE_SOURCE);
+        this.seedTopicAndSource(TOGGLE_TOPIC, TOGGLE_SOURCE);
         Awaitility.await()
                 .atMost(Duration.ofSeconds(60))
                 .pollInterval(Duration.ofSeconds(1))
                 .untilAsserted(() -> {
-                    ResponseEntity<String> ok = postStructured(TOGGLE_SOURCE, TOGGLE_TOPIC, id32(), null,
+                    ResponseEntity<String> ok = this.postStructured(TOGGLE_SOURCE, TOGGLE_TOPIC, id32(), null,
                             "{\"orderId\":\"o-5\"}", String.class);
                     assertEquals(HttpStatus.OK, ok.getStatusCode());
                 });
@@ -252,7 +252,7 @@ class ServerE2eIT {
                 .atMost(Duration.ofSeconds(60))
                 .pollInterval(Duration.ofSeconds(1))
                 .untilAsserted(() -> {
-                    ResponseEntity<ApiResponse> gone = postStructured(TOGGLE_SOURCE, TOGGLE_TOPIC, id32(), null,
+                    ResponseEntity<ApiResponse> gone = this.postStructured(TOGGLE_SOURCE, TOGGLE_TOPIC, id32(), null,
                             "{\"orderId\":\"o-6\"}", ApiResponse.class);
                     assertEquals(HttpStatus.SERVICE_UNAVAILABLE, gone.getStatusCode());
                     assertNotNull(gone.getBody());
@@ -270,7 +270,7 @@ class ServerE2eIT {
      */
     @Test
     void streamSendFailureReturns502() {
-        seedTopicAndSource(BROKEN_TOPIC, BROKEN_SOURCE);
+        this.seedTopicAndSource(BROKEN_TOPIC, BROKEN_SOURCE);
         String streamName = RabbitUtils.streamQueueName(BROKEN_TOPIC, 0);
 
         String uri = "rabbitmq-stream://"
@@ -293,7 +293,7 @@ class ServerE2eIT {
                     .atMost(Duration.ofSeconds(60))
                     .pollInterval(Duration.ofSeconds(1))
                     .untilAsserted(() -> {
-                        ResponseEntity<ApiResponse> failed = postStructured(BROKEN_SOURCE, BROKEN_TOPIC,
+                        ResponseEntity<ApiResponse> failed = this.postStructured(BROKEN_SOURCE, BROKEN_TOPIC,
                                 id32(), null, "{\"orderId\":\"o-7\"}", ApiResponse.class);
                         assertEquals(HttpStatus.BAD_GATEWAY, failed.getStatusCode());
                         assertNotNull(failed.getBody());
@@ -329,14 +329,14 @@ class ServerE2eIT {
                 .atMost(Duration.ofSeconds(60))
                 .pollInterval(Duration.ofSeconds(1))
                 .untilAsserted(() -> {
-                    ResponseEntity<String> probe = postStructured(TOPIC, "{\"probe\":true}", String.class);
+                    ResponseEntity<String> probe = this.postStructured(TOPIC, "{\"probe\":true}", String.class);
                     assertEquals(HttpStatus.OK, probe.getStatusCode());
                 });
         this.sourceReady = true;
     }
 
     private <T> ResponseEntity<T> postStructured(String subject, String dataJson, Class<T> responseType) {
-        return postStructured(SOURCE, subject, id32(), null, dataJson, responseType);
+        return this.postStructured(SOURCE, subject, id32(), null, dataJson, responseType);
     }
 
     private <T> ResponseEntity<T> postStructured(String source, String subject, String id,

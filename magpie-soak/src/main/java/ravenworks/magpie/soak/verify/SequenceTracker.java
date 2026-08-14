@@ -77,7 +77,7 @@ public class SequenceTracker {
             return;
         }
         if (seq == ks.maxSeq + 1) {
-            advance(ks, seq);
+            this.advance(ks, seq);
             return;
         }
         if (this.semantics == Semantics.STRICT) {
@@ -91,7 +91,7 @@ public class SequenceTracker {
             ks.gapSince = nowMs;
         }
         if (ks.pending.size() > this.maxPendingPerKey) {
-            closeGap(ks, nowMs);
+            this.closeGap(ks, nowMs);
         }
     }
 
@@ -104,7 +104,7 @@ public class SequenceTracker {
             var entry = it.next();
             KeyState ks = entry.getValue();
             if (!ks.pending.isEmpty() && ks.gapSince >= 0 && nowMs - ks.gapSince > this.gapTimeoutMs) {
-                closeGap(ks, nowMs);
+                this.closeGap(ks, nowMs);
             }
             if (nowMs - ks.lastSeen > this.staleMs) {
                 it.remove();
@@ -133,7 +133,7 @@ public class SequenceTracker {
         long skipped = ks.pending.first() - ks.maxSeq - 1;
         this.lost += skipped;
         this.listener.onLost(skipped);
-        advance(ks, ks.pending.first() - 1);
+        this.advance(ks, ks.pending.first() - 1);
         if (!ks.pending.isEmpty()) {
             ks.gapSince = nowMs;
         }

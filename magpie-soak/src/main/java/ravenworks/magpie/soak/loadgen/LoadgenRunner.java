@@ -44,7 +44,7 @@ public class LoadgenRunner implements SmartLifecycle {
         for (String topic : this.props.getTopics()) {
             for (int i = 0; i < this.props.getKeyCount(); i++) {
                 String key = this.runId + "-k" + i;
-                this.executor.submit(() -> runChain(topic, key));
+                this.executor.submit(() -> this.runChain(topic, key));
             }
         }
         log.info("loadgen started: runId={}, topics={}, keys/topic={}, rate={}/s",
@@ -57,9 +57,9 @@ public class LoadgenRunner implements SmartLifecycle {
             seq++;
             byte[] body = ProbeFactory.cloudEvent(topic, key, seq, this.props.getPayloadSize());
             while (this.running.get() && !this.publisher.send(topic, body)) {
-                sleep(this.props.getRetryDelay().toMillis());
+                this.sleep(this.props.getRetryDelay().toMillis());
             }
-            sleep(nextIntervalMillis());
+            this.sleep(this.nextIntervalMillis());
         }
     }
 
