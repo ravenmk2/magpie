@@ -1,6 +1,6 @@
 name: magpie-soak
 
-# Magpie 长期 soak 环境：rabbitmq×3 集群 + mysql + magpie×2 + loadgen/verifier + 监控。
+# Magpie 长期 soak 环境：rabbitmq×3 集群 + mysql + magpie×2 + loadgen/verifier + 监控 + autoheal 自愈。
 # 对外只暴露 Grafana 一个端口（127.0.0.1，经 SSH 隧道访问）；其余组件全部只在内部网络。
 # 用法见 deploy/soak/README.md。
 
@@ -18,6 +18,7 @@ services:
       - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
       - rabbitmq-1-data:/var/lib/rabbitmq
+    labels: [autoheal]
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -57,6 +58,7 @@ services:
       - ../../docs/database/source-mysql.sql:/docker-entrypoint-initdb.d/01-outbox.sql:ro
       - ./init/10-seed.sql:/docker-entrypoint-initdb.d/10-seed.sql:ro
       - mysql-data:/var/lib/mysql
+    labels: [autoheal]
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
       interval: 10s
@@ -88,6 +90,14 @@ services:
         condition: service_healthy
       rabbitmq-3:
         condition: service_healthy
+    labels: [autoheal]
+    healthcheck:
+      # 全量 health（含 DB 探针）：强信号；依赖宕机时会被级联重启，属预期
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
     restart: unless-stopped
     networks: [soak]
 
@@ -101,6 +111,13 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: verifier
       TZ: Asia/Shanghai
+    labels: [autoheal]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
     restart: unless-stopped
     networks: [soak]
 
@@ -120,6 +137,17 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      magpie-1:
+        condition: service_healthy
+      magpie-2:
+        condition: service_healthy
+    labels: [autoheal]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
     restart: unless-stopped
     networks: [soak]
 
@@ -166,6 +194,19 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./fault-inject.sh:/fault-inject.sh:ro
+    restart: unless-stopped
+    network_mode: none
+
+  # 自愈：把带 autoheal 标签且 healthcheck 持续失败的容器转为 restart。
+  # 警告：与 chaos 一样挂载 docker.sock，只在专用 soak 机器上启用。
+  autoheal:
+    image: willfarrell/autoheal:1.2.0
+    container_name: soak-autoheal
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      AUTOHEAL_INTERVAL: "30"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     network_mode: none
 

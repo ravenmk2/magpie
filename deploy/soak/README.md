@@ -95,6 +95,21 @@ docker compose -f deploy/soak/compose.yml --profile chaos up -d
 
 注入期间观察看板：违规计数应保持为 0，重复与延迟会上升，恢复后回落。
 
+## 健康检查与自愈
+
+- rabbitmq / mysql / magpie / loadgen / verifier 均带 healthcheck（rabbitmq 用
+  `rabbitmq-diagnostics ping`，mysql 用 `mysqladmin ping`，应用容器用
+  `curl -fsS localhost:8080/actuator/health`，镜像内已装 curl）
+- `autoheal` 服务（willfarrell/autoheal）每 30s 巡检，把持续 unhealthy 的容器转为重启，
+  配合 `restart: unless-stopped` 与 `depends_on: service_healthy` 形成自愈闭环
+- magpie 的探针是全量 `/actuator/health`（含 DB 指示器）：mysql 宕机期间 magpie 也会
+  unhealthy 并被级联重启，属预期行为
+- **前置**：应用探针依赖镜像内的 curl，更新 compose 后必须重新执行
+  `scripts/build-image.sh` / `scripts/build-soak-image.sh`，否则探针永远失败、
+  autoheal 会陷入重启循环
+- **安全警告**：autoheal 与 chaos 一样挂载 `/var/run/docker.sock`（宿主机 Docker 全权），
+  且 autoheal 默认常驻、不在 profile 之后——本环境整体只应在专用 soak 机器上运行
+
 ## 负载调节
 
 发送速率与 key 数直接在 `.env` 里调（`LOADGEN_RATE_PER_SEC` / `LOADGEN_KEY_COUNT`），
