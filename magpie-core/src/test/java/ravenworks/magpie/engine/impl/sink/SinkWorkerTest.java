@@ -34,6 +34,7 @@ class SinkWorkerTest {
         private final Queue<List<ConsumerRecord>> scripted = new ConcurrentLinkedQueue<>();
         final AtomicBoolean started = new AtomicBoolean();
         final AtomicBoolean stopped = new AtomicBoolean();
+        final AtomicBoolean failOnStart = new AtomicBoolean();
         final AtomicBoolean failFatally = new AtomicBoolean();
         final AtomicBoolean failCommits = new AtomicBoolean();
         final AtomicInteger pollCount = new AtomicInteger();
@@ -51,6 +52,9 @@ class SinkWorkerTest {
 
         @Override
         public void start() {
+            if (this.failOnStart.get()) {
+                throw new RuntimeException("simulated start failure (rabbitmq unavailable)");
+            }
             this.started.set(true);
         }
 
@@ -85,6 +89,8 @@ class SinkWorkerTest {
 
         final AtomicBoolean ready = new AtomicBoolean(true);
         final AtomicBoolean retryable = new AtomicBoolean(false);
+        final AtomicBoolean failOnInit = new AtomicBoolean();
+        final AtomicInteger initCount = new AtomicInteger();
         final AtomicInteger retryCount = new AtomicInteger();
         final AtomicInteger interruptCount = new AtomicInteger();
         final List<List<ConsumerRecord>> delivered = new CopyOnWriteArrayList<>();
@@ -92,6 +98,14 @@ class SinkWorkerTest {
 
         void thenReturn(BatchOutcome... outcomes) {
             this.script.addAll(List.of(outcomes));
+        }
+
+        @Override
+        public void init() {
+            this.initCount.incrementAndGet();
+            if (this.failOnInit.get()) {
+                throw new RuntimeException("simulated init failure (mysql unavailable)");
+            }
         }
 
         @Override
@@ -369,6 +383,40 @@ class SinkWorkerTest {
         } finally {
             h.shutdown();
         }
+    }
+
+    @Test
+    void consumerStartFailureMarksWorkerNotAlive() throws Exception {
+        var h = new Harness(60_000);
+        h.consumer.failOnStart.set(true);
+        h.worker.start();
+
+        // 启动失败（依赖不可用）：上报死亡，由 reconcile 退役重建
+        await().atMost(2, TimeUnit.SECONDS).until(() -> !h.worker.isAlive());
+
+        // 不拉取、不触碰未初始化的 deliverer；停尸不再自续轮询
+        Thread.sleep(300);
+        assertEquals(0, h.consumer.pollCount.get());
+        assertTrue(h.deliverer.delivered.isEmpty());
+
+        // 停止一个启动失败的 worker 是干净的成功路径
+        h.worker.shutdown().get(2, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void delivererInitFailureRecyclesConsumerAndMarksNotAlive() throws Exception {
+        var h = new Harness(60_000);
+        h.deliverer.failOnInit.set(true);
+        h.worker.start();
+
+        // consumer.start 已成功但 init 失败：consumer 被回收（不泄漏底层订阅），worker 上报死亡
+        await().atMost(2, TimeUnit.SECONDS).until(() -> !h.worker.isAlive());
+        assertTrue(h.consumer.started.get());
+        assertTrue(h.consumer.stopped.get());
+        // init 失败不原地重试（重试靠 reconcile 重建），init 只被调用一次
+        assertEquals(1, h.deliverer.initCount.get());
+
+        h.worker.shutdown().get(2, TimeUnit.SECONDS);
     }
 
 }
