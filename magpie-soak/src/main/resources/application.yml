@@ -11,7 +11,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus
+        include: health,info,prometheus,threaddump
 
 server:
   port: 8080
@@ -38,7 +38,7 @@ soak:
       multiplier: ${LOADGEN_BURST_MULTIPLIER:5}
     outbox:
       enabled: ${OUTBOX_ENABLED:false}
-      jdbc-url: jdbc:mysql://${MYSQL_HOST:localhost}:3306/magpie?useSSL=false&characterEncoding=UTF-8
+      jdbc-url: jdbc:mysql://${MYSQL_HOST:localhost}:3306/magpie?useSSL=false&characterEncoding=UTF-8&connectTimeout=10000&socketTimeout=20000
       username: ${MYSQL_USERNAME:root}
       password: ${MYSQL_PASSWORD:root}
       topic: ${OUTBOX_TOPIC:soak-outbox}

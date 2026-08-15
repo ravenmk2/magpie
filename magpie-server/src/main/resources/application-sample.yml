@@ -17,7 +17,7 @@ spring:
     time-zone: ${TZ:Asia/Shanghai}             # Jackson 序列化 Instant 时区
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://${MYSQL_HOST:mysql}:3306/magpie?useSSL=false&characterEncoding=UTF-8
+    url: jdbc:mysql://${MYSQL_HOST:mysql}:3306/magpie?useSSL=false&characterEncoding=UTF-8&connectTimeout=10000&socketTimeout=20000
     username: ${MYSQL_USERNAME:root}
     password: ${MYSQL_PASSWORD:root}
   jpa:
@@ -36,7 +36,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus    # 暴露 Prometheus 指标端点（/actuator/prometheus）
+        include: health,info,prometheus,threaddump    # 暴露 Prometheus 指标端点（/actuator/prometheus）
 
 
 magpie:
