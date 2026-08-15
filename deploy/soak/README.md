@@ -73,9 +73,9 @@ docker logs -f soak-verifier                    # 等 "soak report" 周期性输
 手动注入（宿主机直接执行）：
 
 ```bash
-deploy/soak/fault-inject.sh kill-magpie         # SIGKILL 随机一台 magpie（restart 策略自动拉起）
+deploy/soak/fault-inject.sh kill-magpie         # SIGKILL 随机一台 magpie，短暂停机后拉起
 deploy/soak/fault-inject.sh restart-rabbit      # 滚动重启随机 RabbitMQ 节点
-deploy/soak/fault-inject.sh bounce-mysql        # SIGKILL MySQL
+deploy/soak/fault-inject.sh bounce-mysql        # SIGKILL MySQL，短暂停机后拉起
 deploy/soak/fault-inject.sh partition-rabbit 60 # 随机 RabbitMQ 节点断网 60s
 deploy/soak/fault-inject.sh loop                # 循环随机注入（默认间隔 300~900s）
 ```
