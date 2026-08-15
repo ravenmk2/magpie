@@ -9,6 +9,7 @@ import ravenworks.magpie.common.util.PartitionUtils;
 import ravenworks.magpie.common.util.TimeUtils;
 import ravenworks.magpie.engine.api.stream.*;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -29,6 +30,7 @@ public class RabbitStreamProducer implements StreamProducer {
             String name = RabbitUtils.streamQueueName(definition.name(), i);
             var producer = environment.producerBuilder()
                     .stream(name)
+                    .confirmTimeout(Duration.ofSeconds(10))
                     .build();
             this.producers.add(producer);
         }

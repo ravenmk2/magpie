@@ -69,13 +69,12 @@ public class RabbitStreamConsumer implements StreamConsumer {
                 .flow()
                 .strategy(ConsumerFlowStrategy.creditOnProcessedMessageCount(10, 0.5))
                 .builder()
-                .manualTrackingStrategy()
-                .builder()
-                .subscriptionListener(ctx -> ctx.offsetSpecification(this.trackedOffset()))
+                .noTrackingStrategy()
+                .subscriptionListener(ctx -> ctx.offsetSpecification(this.trackedOffset("subscription")))
                 // SAC 激活（首次激活与接管）时 broker 会再询问一次起始 offset（consumer update）。
                 // 默认实现只查服务端存储的 offset，本项目不走服务端跟踪，会回退到 next()
                 // 跳过全部存量消息；这里与 subscriptionListener 保持一致，统一以 OffsetTracker 为准
-                .consumerUpdateListener(ctx -> ctx.isActive() ? this.trackedOffset() : null)
+                .consumerUpdateListener(ctx -> ctx.isActive() ? this.trackedOffset("consumer-update") : null)
                 .messageHandler((ctx, msg) -> {
                     try {
                         this.queue.put(new QueuedItem(ctx, msg));
@@ -144,9 +143,9 @@ public class RabbitStreamConsumer implements StreamConsumer {
     /**
      * 以 OffsetTracker（DB）为准的起始位置：订阅建立与 SAC 激活时都从这里恢复。
      */
-    private OffsetSpecification trackedOffset() {
+    private OffsetSpecification trackedOffset(String source) {
         long offset = this.offsetTracker.read(this.name, this.partition);
-        log.info("[{}] partition={} resuming from offset={}", this.name, this.partition, offset);
+        log.info("[{}] partition={} {} resuming from offset={}", this.name, this.partition, source, offset);
         return resolveOffset(offset);
     }
 
