@@ -27,7 +27,7 @@ import java.util.concurrent.locks.LockSupport;
  * committableOffset 是已处置水位，为提交的唯一来源；committedOffset 记录已提交水位。
  * 提交按 commitInterval 节流（避免每批一次存储 IO），中断与停机时立即提交。
  *
- * <p>启动失败（onStart 中外部依赖不可用）：worker 保持未启动状态（isAlive=false），
+ * <p>启动失败（onStart 中外部依赖不可用）：worker 标记为死亡（isAlive=false），
  * 不再拉取，由上层 reconcile 观测后退役重建——重建即启动重试。
  *
  * @author Raven
@@ -57,10 +57,10 @@ public class SinkWorker implements Lifecycle {
 
     private volatile Thread loopThread;
     /**
-     * onStart 完整成功（consumer 启动 + deliverer 初始化）后置 true；
-     * 失败保持 false：上报死亡，由上层 reconcile 的 isAlive 观测退役重建
+     * onStart 失败（外部依赖暂不可用）后置位：上报死亡，
+     * 由上层 reconcile 的 isAlive 观测退役重建
      */
-    private volatile boolean started;
+    private volatile boolean startFailed;
     /**
      * 部分处置（中断信号）后置位：不再拉取，未处置后缀等重启从未提交 offset 重投
      */
@@ -103,7 +103,7 @@ public class SinkWorker implements Lifecycle {
 
     @Override
     public boolean isAlive() {
-        return this.started && this.workLoop.isAlive();
+        return !this.startFailed && this.workLoop.isAlive();
     }
 
     private void dispatch(Object event) {
@@ -129,13 +129,13 @@ public class SinkWorker implements Lifecycle {
             this.consumer.start();
             this.deliverer.init();
         } catch (Exception e) {
-            // 外部依赖暂不可用：保持未启动（上报死亡）并回收可能已启动的 consumer，
+            // 外部依赖暂不可用：标记死亡并回收可能已启动的 consumer，
             // reconcile 观测到 isAlive=false 后退役重建，重建即重试
+            this.startFailed = true;
             this.stopConsumer();
             log.error("[{}] failed to start, waiting for reconcile to restart", this.name, e);
             return;
         }
-        this.started = true;
         this.workLoop.enqueue(POLL_SIGNAL);
     }
 
@@ -161,8 +161,8 @@ public class SinkWorker implements Lifecycle {
     }
 
     private void pollAndProcess() {
-        if (!this.isRunning() || !this.started) {
-            // 未成功启动：等 reconcile 重建，不触碰未初始化的 consumer/deliverer
+        if (!this.isRunning() || this.startFailed) {
+            // 启动失败：等 reconcile 重建，不触碰未初始化的 consumer/deliverer
             return;
         }
         this.maybeCommitByTime();
