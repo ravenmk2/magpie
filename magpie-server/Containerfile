@@ -7,20 +7,21 @@ RUN java -Djarmode=tools -jar app.jar extract --layers --application-filename ap
 
 FROM eclipse-temurin:25-jre
 
-RUN groupadd --gid 900 app \
-    && useradd --uid 900 --gid app --no-create-home app \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /app/config /app/logs \
-    && chown app:app /app/config /app/logs
+    && chown 1000:1000 /app/config /app/logs
 
 WORKDIR /app
 
-COPY --chown=app:app magpie-server/src/main/resources/application-sample.yml config/application.yml
+COPY --chown=1000:1000 magpie-server/src/main/resources/application-sample.yml config/application.yml
 
-COPY --from=builder --chown=app:app /build/extracted/dependencies/ ./
-COPY --from=builder --chown=app:app /build/extracted/spring-boot-loader/ ./
-COPY --from=builder --chown=app:app /build/extracted/snapshot-dependencies/ ./
-COPY --from=builder --chown=app:app /build/extracted/application/ ./
+COPY --from=builder --chown=1000:1000 /build/extracted/dependencies/ ./
+COPY --from=builder --chown=1000:1000 /build/extracted/spring-boot-loader/ ./
+COPY --from=builder --chown=1000:1000 /build/extracted/snapshot-dependencies/ ./
+COPY --from=builder --chown=1000:1000 /build/extracted/application/ ./
 
-USER app
+USER 1000
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]

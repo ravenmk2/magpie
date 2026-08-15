@@ -7,19 +7,20 @@ RUN java -Djarmode=tools -jar app.jar extract --layers --application-filename ap
 
 FROM eclipse-temurin:25-jre
 
-RUN groupadd --gid 900 app \
-    && useradd --uid 900 --gid app --no-create-home app \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /app/logs \
-    && chown app:app /app/logs
+    && chown 1000:1000 /app/logs
 
 WORKDIR /app
 
-COPY --from=builder --chown=app:app /build/extracted/dependencies/ ./
-COPY --from=builder --chown=app:app /build/extracted/spring-boot-loader/ ./
-COPY --from=builder --chown=app:app /build/extracted/snapshot-dependencies/ ./
-COPY --from=builder --chown=app:app /build/extracted/application/ ./
+COPY --from=builder --chown=1000:1000 /build/extracted/dependencies/ ./
+COPY --from=builder --chown=1000:1000 /build/extracted/spring-boot-loader/ ./
+COPY --from=builder --chown=1000:1000 /build/extracted/snapshot-dependencies/ ./
+COPY --from=builder --chown=1000:1000 /build/extracted/application/ ./
 
-USER app
+USER 1000
 EXPOSE 8080
 # 角色由 SPRING_PROFILES_ACTIVE=loadgen|verifier 决定
 ENTRYPOINT ["java", "-jar", "app.jar"]
