@@ -12,7 +12,7 @@
     <modules>
         <module>magpie-core</module>
         <module>magpie-server</module>
-        <module>magpie-soak</module>
+        <module>magpie-testkit</module>
     </modules>
 
     <scm>

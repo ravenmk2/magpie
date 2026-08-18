@@ -10,7 +10,11 @@ import ravenworks.magpie.engine.api.source.SourceConnector;
 import ravenworks.magpie.engine.api.source.SourceDefinition;
 import ravenworks.magpie.engine.api.source.SourceFactory;
 import ravenworks.magpie.engine.api.source.SourceRegistry;
-import ravenworks.magpie.engine.api.stream.*;
+import ravenworks.magpie.engine.api.stream.StreamConsumer;
+import ravenworks.magpie.engine.api.stream.StreamDefinition;
+import ravenworks.magpie.engine.api.stream.StreamProducer;
+import ravenworks.magpie.engine.api.stream.StreamProvider;
+import ravenworks.magpie.engine.api.stream.StreamRegistry;
 
 import java.util.List;
 import java.util.Map;

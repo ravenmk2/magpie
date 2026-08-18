@@ -2,11 +2,11 @@
 
 ## 分层
 
-| 层        | 命名                                | 运行方式                                         | 覆盖                                                                    |
-|-----------|-------------------------------------|--------------------------------------------------|-------------------------------------------------------------------------|
-| 单元测试  | `*Test`（surefire）                 | `mvn test`                                       | 引擎内部逻辑，手写 fake（不用 Mockito），H2 见 `JpaTestSupport`         |
-| 集成测试  | `*IT`（failsafe）                   | `mvn verify -Pit`                                | 真实中间件边界：RabbitMQ Stream、MySQL（Testcontainers）                |
-| 长期 soak | `magpie-soak` 模块 + `deploy/soak/` | 常驻环境，手动运行（见 `deploy/soak/README.md`） | 语义不变量（不丢/有序）与长期稳定性：真实集群拓扑 + 持续负载 + 故障注入 |
+| 层        | 命名                                        | 运行方式                                              | 覆盖                                                                    |
+|-----------|---------------------------------------------|-------------------------------------------------------|-------------------------------------------------------------------------|
+| 单元测试  | `*Test`（surefire）                         | `mvn test`                                            | 引擎内部逻辑，手写 fake（不用 Mockito），H2 见 `JpaTestSupport`         |
+| 集成测试  | `*IT`（failsafe）                           | `mvn verify -Pit`                                     | 真实中间件边界：RabbitMQ Stream、MySQL（Testcontainers）                |
+| 长期 soak | `magpie-testkit` 模块 + `deploy/soak-test/` | 常驻环境，手动运行（见 `deploy/soak-test/README.md`） | 语义不变量（不丢/有序）与长期稳定性：真实集群拓扑 + 持续负载 + 故障注入 |
 
 原则：能手写 fake 的内部逻辑留在单元测试层；IT 只花在 fake 验证不了的真实边界上 （RabbitMQ offset 语义、MySQL 行锁/native
 query、`docs/database/schema.sql` 在真实 MySQL 上的可执行性）。
@@ -26,12 +26,12 @@ query、`docs/database/schema.sql` 在真实 MySQL 上的可执行性）。
 约定：stream / schema 名带随机后缀或按测试类独立；异步断言用 Awaitility，禁止 sleep； 容器随测试 JVM 退出由 Ryuk 回收，IT
 不做显式清理。
 
-## 长期 soak 测试（`magpie-soak` + `deploy/soak/`）
+## 长期 soak 测试（`magpie-testkit` + `deploy/soak-test/`）
 
 第三层：在真实集群拓扑（RabbitMQ Stream ×3、MySQL、双实例引擎，Docker Compose 常驻）上 持续运行负载并注入故障（杀实例、滚动重启
 broker、断网、MySQL 宕机），由 verifier 按通道 断言语义不变量（STRICT：同 key 首次 seq 必须连续；RELAXED：只判丢失），违规计数接
 Prometheus 告警。harness 与被测系统只经公开契约交互（CloudEvents / 发布端点 / outbox 表）， 不依赖 magpie-core。部署与操作见
-`deploy/soak/README.md`。
+`deploy/soak-test/README.md`。
 
 现有 IT：
 

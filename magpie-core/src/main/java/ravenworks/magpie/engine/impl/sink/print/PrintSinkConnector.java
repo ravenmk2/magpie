@@ -5,7 +5,11 @@ import lombok.extern.slf4j.Slf4j;
 import ravenworks.magpie.common.runtime.WorkLoop;
 import ravenworks.magpie.common.runtime.WorkLoopSignal;
 import ravenworks.magpie.engine.api.sink.SinkConnector;
-import ravenworks.magpie.engine.api.stream.*;
+import ravenworks.magpie.engine.api.stream.ConsumerRecord;
+import ravenworks.magpie.engine.api.stream.StreamConsumer;
+import ravenworks.magpie.engine.api.stream.StreamDefinition;
+import ravenworks.magpie.engine.api.stream.StreamProvider;
+import ravenworks.magpie.engine.api.stream.StreamRegistry;
 
 import java.time.Duration;
 import java.util.ArrayList;

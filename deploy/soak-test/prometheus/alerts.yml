@@ -1,0 +1,43 @@
+groups:
+  - name: soak
+    rules:
+      # 语义违规：soak 环境存在的第一理由，一旦出现立即需要人介入
+      - alert: SoakMessageLost
+        expr: increase(testkit_lost_total[10m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "soak 检测到消息丢失（通道 {{ $labels.channel }}，10 分钟内 {{ $value }} 条）"
+
+      - alert: SoakOutOfOrder
+        expr: increase(testkit_out_of_order_total[10m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "soak 检测到乱序投递（通道 {{ $labels.channel }}，10 分钟内 {{ $value }} 条）"
+
+      # 探针无法解析 / business key 不符：可能是投递格式被破坏，也可能是 harness 自身问题
+      - alert: SoakInvalidProbe
+        expr: increase(testkit_invalid_total[10m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "soak 出现无效探针（通道 {{ $labels.channel }}）"
+
+      # 发送端持续有量、接收端归零：投递停滞（故障注入后会短暂触发，for 5m 过滤）
+      - alert: SoakDeliveryStalled
+        expr: sum(rate(testkit_received_total[5m])) == 0 and sum(rate(testkit_sent_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "soak 投递停滞：持续发送但无投递到达"
+
+      # 发布失败率：magpie 重启期间出现属预期，持续 15 分钟才报
+      - alert: SoakSendFailing
+        expr: sum(rate(testkit_send_errors_total[5m])) > 0.5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "soak 发布持续失败（>0.5 msg/s，15 分钟）"

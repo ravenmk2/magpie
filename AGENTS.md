@@ -19,8 +19,8 @@ docs/
 ## 测试
 
 - 单元测试：`mvn test`（surefire，`*Test`）；手写 fake，不用 Mockito。
-- 集成测试：`mvn verify -Pit`（failsafe，`*IT`，Testcontainers 起 MySQL / RabbitMQ Stream，需 Docker）；
-  远程测试机见 `scripts/install-toolchain.sh` / `scripts/run-it.sh`。
-- 长期 soak：`magpie-soak` 模块（loadgen/verifier）+ `deploy/soak/`（Compose 常驻环境），
-  镜像构建用 `scripts/build-image.sh` / `scripts/build-soak-image.sh`，操作见 `deploy/soak/README.md`。
+- 集成测试：`mvn verify -Pit`（failsafe，`*IT`，Testcontainers 起 MySQL / RabbitMQ Stream，需 Docker）； 远程测试机见
+  `scripts/install-toolchain.sh` / `scripts/run-it.sh`。
+- 长期 soak：`magpie-testkit` 模块（loadgen/verifier 系统测试工装）+ `deploy/soak-test/`（Compose 常驻环境）， 镜像构建用
+  `scripts/build-image.sh` / `scripts/build-testkit-image.sh`，操作见 `deploy/soak-test/README.md`。
 - 分层约定与基建说明见 `docs/testing.md`。

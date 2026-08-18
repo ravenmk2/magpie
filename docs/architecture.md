@@ -14,12 +14,12 @@ Magpie 是一个架在 RabbitMQ Stream 之上的消息总线，负责消息的�
 
 ## Maven 模块
 
-| 模块            | 说明                                                                                           |
-|-----------------|------------------------------------------------------------------------------------------------|
-| `magpie`        | 父 POM，统一管理依赖与插件版本                                                                 |
-| `magpie-core`   | 引擎核心库：连接器体系、Stream 抽象、调度运行时、领域模型                                      |
-| `magpie-server` | Spring Boot 启动模块：装配引擎、暴露 HTTP 接口                                                 |
-| `magpie-soak`   | 长期 soak 测试工具：loadgen / verifier 双角色，按 Spring profile 分流（编排见 `deploy/soak/`） |
+| 模块             | 说明                                                                                          |
+|------------------|-----------------------------------------------------------------------------------------------|
+| `magpie`         | 父 POM，统一管理依赖与插件版本                                                                |
+| `magpie-core`    | 引擎核心库：连接器体系、Stream 抽象、调度运行时、领域模型                                     |
+| `magpie-server`  | Spring Boot 启动模块：装配引擎、暴露 HTTP 接口                                                |
+| `magpie-testkit` | 系统测试工装：loadgen / verifier 双角色，按 Spring profile 分流（编排见 `deploy/soak-test/`） |
 
 ## 主要包结构
 
